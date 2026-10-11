@@ -2,6 +2,7 @@
 {% block tittel %}Invitasjon — FINN-marked{% endblock %}
 {% block innhold %}
 <div class="kort smal">
+  <div class="hero">{% include "ikon/illustrasjon.svg" %}</div>
   {% if inv %}
   <h1>Hei, {{ inv.navn }}</h1>
   <p class="dempet">Du er invitert til FINN-marked. Lag en passkey på denne enheten, så er du inne —

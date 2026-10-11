@@ -8,7 +8,7 @@
 </p>
 
 {% for r in oversikt %}
-<div class="kort">
+<div class="kort vakt-kort">
   <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap">
     <div>
       <a class="navn" style="font-size:17px" href="/vakt/{{ r.v.slug }}">{{ r.v.navn }}</a>
@@ -41,8 +41,11 @@
   </div>
 </div>
 {% else %}
-<div class="kort">
-  <p>Ingen vakter ennå. <a href="/vakt/ny">Opprett den første</a> — f.eks. med søke-URL-en fra FINN.</p>
+<div class="kort tom">
+  {% include "ikon/illustrasjon.svg" %}
+  <h2 style="margin-top:0">Ingen vakter ennå</h2>
+  <p class="dempet">Lim inn et søk fra finn.no, så følger appen markedet for deg: priser, salg og verdikurve.</p>
+  <a href="/vakt/ny" class="knapp-lenke"><button>Opprett den første vakten</button></a>
 </div>
 {% endfor %}
 {% endblock %}

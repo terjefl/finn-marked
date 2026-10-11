@@ -4,18 +4,22 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block tittel %}FINN-marked{% endblock %}</title>
+<link rel="icon" href="/static/favicon.ico" sizes="32x32">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta name="theme-color" content="#0d6fa6">
 {% block hode %}{% endblock %}
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header>
-  <a class="logo" href="/">FINN-marked</a>
+  <a class="logo" href="/"><img src="/static/ikon/merke.svg" alt="">FINN-marked<small>bruktbil over tid</small></a>
   <nav>
     {% if bruker %}
       <a href="/">Oversikt</a>
       <a href="/vakt/ny">Ny vakt</a>
       {% if bruker.rolle == 'admin' %}<a href="/admin/brukere">Brukere</a>{% endif %}
-      <a href="/konto">{{ bruker.navn }}</a>
+      <a href="/konto" class="meg">{{ bruker.navn }}</a>
       <form class="inline" method="post" action="/loggut"><button class="lett liten">Logg ut</button></form>
     {% endif %}
   </nav>
