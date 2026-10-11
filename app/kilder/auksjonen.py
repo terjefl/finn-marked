@@ -31,6 +31,7 @@ import json
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -66,7 +67,9 @@ def _aar_km(tittel: str) -> tuple[int | None, int | None]:
     if m:
         aar = int(m.group(1))
     km = None
-    m = re.search(r"([\d][\d\s\xa0.]{2,9})\s*km\b", (tittel or "").lower())
+    # Lookbehind: tallet må starte et eget ord. Uten den ble «BMW i4 45 000 km» til
+    # 445 000 km, fordi «4» fra «i4» ble limt sammen med kilometerstanden.
+    m = re.search(r"(?<![\w.,])(\d[\d\s\xa0.]{2,9})\s*km\b", (tittel or "").lower())
     if m:
         d = re.sub(r"[^\d]", "", m.group(1))
         if d and int(d) < 1_000_000:      # «1500 km» og «1 200 000» er støy

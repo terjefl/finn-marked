@@ -165,11 +165,11 @@ def hent_detaljer(url: str) -> dict:
     """Leser detaljsiden: spesifikasjoner, utstyrsliste og beskrivelse."""
     h = hent(url)
     tekst = htmllib.unescape(re.sub(r"<[^>]+>", "\n", h))
-    linjer = [l.strip() for l in re.sub(r"\n{2,}", "\n", tekst).splitlines() if l.strip()]
+    linjer = [linje.strip() for linje in re.sub(r"\n{2,}", "\n", tekst).splitlines() if linje.strip()]
 
     def etter(etikett: str, vindu: int = 6):
-        for i, l in enumerate(linjer):
-            if l.lower() == etikett.lower():
+        for i, linje in enumerate(linjer):
+            if linje.lower() == etikett.lower():
                 for j in range(i + 1, min(i + vindu, len(linjer))):
                     if linjer[j] not in (":", ""):
                         return linjer[j]
