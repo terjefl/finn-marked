@@ -21,6 +21,12 @@ SLEEP = 1.0
 
 
 def hent(url: str, timeout: int = 40, forsok: int = 3) -> str:
+    """Henter en side og prøver på nytt ved nettverksfeil, 5xx og 429.
+
+    403/404 prøves ikke på nytt: en permanent avvisning blir ikke bedre av å gjentas,
+    og de gamle forsøkene gjorde bare at hver skannedag brukte tre ganger så lang tid
+    på sider som uansett ikke finnes.
+    """
     siste: Exception | None = None
     for n in range(forsok):
         try:
@@ -31,6 +37,14 @@ def hent(url: str, timeout: int = 40, forsok: int = 3) -> str:
             })
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return r.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as e:
+            siste = e
+            if e.code == 429:                     # «for mange forespørsler» – vent lenger
+                time.sleep(10 * (n + 1))
+            elif e.code >= 500:
+                time.sleep(2 * (n + 1))
+            else:
+                raise RuntimeError(f"henting avvist for {url}: HTTP {e.code} {e.reason}") from e
         except (urllib.error.URLError, TimeoutError, OSError) as e:
             siste = e
             time.sleep(2 * (n + 1))

@@ -6,10 +6,12 @@ Alt merkes med `slug` slik at flere vakter kan dele samme base.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import sqlite3
 import threading
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 
@@ -129,6 +131,20 @@ def base() -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     return con
+
+
+@contextlib.contextmanager
+def aapen() -> Iterator[sqlite3.Connection]:
+    """Åpner basen og lukker den alltid.
+
+    Rutene bruker denne (via FastAPI-dependencyen `web.kon`) i stedet for
+    `con = db.base()` / try / finally `con.close()` i hver enkelt rute.
+    """
+    con = base()
+    try:
+        yield con
+    finally:
+        con.close()
 
 
 def init() -> None:
