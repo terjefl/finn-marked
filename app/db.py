@@ -10,9 +10,15 @@ import json
 import os
 import sqlite3
 import threading
+from datetime import datetime
 from pathlib import Path
 
 DATA = Path(os.environ.get("FINN_DATA", "/data"))
+
+#: Ett tidsformat for hele basen. SQLite sin `datetime('now','localtime')` gir samme
+#: form; poenget er at Python-siden ikke skal skrive ISO med «T» ved siden av, for da
+#: sorterer tekstsammenligningen (`tid >= ?`) feil og hendelser forsvinner.
+TIDSFORMAT = "%Y-%m-%d %H:%M:%S"
 
 SKJEMA = """
 CREATE TABLE IF NOT EXISTS vakter (
@@ -68,9 +74,50 @@ CREATE INDEX IF NOT EXISTS idx_hendelser_slug ON hendelser(slug, tid);
 _lock = threading.Lock()
 
 
+def naa() -> str:
+    """Nå, i basens format (lokal tid)."""
+    return datetime.now().strftime(TIDSFORMAT)
+
+
+def normaliser_tid(verdi: str | None) -> str | None:
+    """Gjør et tidsstempel om til basens format.
+
+    Tar ISO med «T» (`2026-10-11T13:52:11`, med eller uten sone) i tillegg til basens
+    eget format. Uten dette ble `?since=2026-10-11T13:52:11` sammenlignet som tekst mot
+    `2026-10-11 13:52:11` og ga null treff på hendelser som fantes.
+    """
+    if not verdi:
+        return verdi
+    v = verdi.strip()
+    if "T" not in v:
+        return v
+    try:
+        tid = datetime.fromisoformat(v.replace("Z", "+00:00"))
+    except ValueError:
+        return v
+    if tid.tzinfo is not None:                 # sone gitt: legg om til lokal tid
+        tid = tid.astimezone().replace(tzinfo=None)
+    return tid.strftime(TIDSFORMAT)
+
+
+def data() -> Path:
+    """Basens mappe, lest på nytt hver gang.
+
+    `FINN_DATA` må kunne settes *etter* import — scripts/importer.py satte den først
+    inne i funksjonen, etter at `DATA` alt var beregnet, og skrev dermed til feil base.
+    """
+    return Path(os.environ.get("FINN_DATA", "/data"))
+
+
+def sett_data(mappe: str | Path) -> None:
+    """Peker basen et annet sted (brukes av importeren og av testene)."""
+    os.environ["FINN_DATA"] = str(mappe)
+
+
 def base() -> sqlite3.Connection:
-    DATA.mkdir(parents=True, exist_ok=True)
-    con = sqlite3.connect(DATA / "finn-marked.sqlite", timeout=30)
+    mappe = data()
+    mappe.mkdir(parents=True, exist_ok=True)
+    con = sqlite3.connect(mappe / "finn-marked.sqlite", timeout=30)
     con.row_factory = sqlite3.Row
     con.execute("PRAGMA journal_mode=WAL")
     return con
@@ -82,10 +129,13 @@ def init() -> None:
 
 
 def slett_gammelt(con: sqlite3.Connection, dager: int = 365) -> None:
-    """Beskjærer pris-historikk og hendelser. Annonser beholdes (historikken er
-    poenget), men hendelsesloggen trenger ikke vokse i det uendelige."""
-    con.execute("DELETE FROM hendelser WHERE tid < date('now', ?)", (f"-{dager} days",))
-    con.execute("DELETE FROM pris_historikk WHERE dato < date('now', ?)", (f"-{dager} days",))
+    """Beskjærer hendelsesloggen.
+
+    Pris-historikken beholdes med vilje: den er poenget med basen (prisutvikling over
+    tid), og den vokser med noen få rader per annonse — ikke som hendelsesloggen.
+    """
+    con.execute("DELETE FROM hendelser WHERE tid < datetime('now','localtime', ?)",
+               (f"-{dager} days",))
 
 
 def vakter(con: sqlite3.Connection, kun_aktive: bool = False) -> list[dict]:
@@ -117,7 +167,7 @@ def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
         """INSERT INTO vakter (slug, navn, sok, kategorier, egen_bil, egen_km, hentetime, aktiv,
                                opprettet, sist_hentet, sist_status)
            VALUES (:slug, :navn, :sok, :kategorier, :egen_bil, :egen_km, :hentetime, :aktiv,
-                   COALESCE(:opprettet, datetime('now','localtime')), :sist_hentet, :sist_status)
+                   COALESCE(:opprettet, :naa), :sist_hentet, :sist_status)
            ON CONFLICT(slug) DO UPDATE SET
              navn=excluded.navn, sok=excluded.sok, kategorier=excluded.kategorier,
              egen_bil=excluded.egen_bil, egen_km=excluded.egen_km,
@@ -129,7 +179,7 @@ def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
             "egen_bil": v.get("egen_bil"), "egen_km": v.get("egen_km"),
             "hentetime": int(v.get("hentetime") or 7), "aktiv": int(v.get("aktiv", 1)),
             "opprettet": v.get("opprettet"), "sist_hentet": v.get("sist_hentet"),
-            "sist_status": v.get("sist_status"),
+            "sist_status": v.get("sist_status"), "naa": naa(),
         },
     )
 
@@ -137,8 +187,8 @@ def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
 def hendelse(con: sqlite3.Connection, slug: str, type_: str, lenke: str | None,
              tekst: str, detaljer: dict | None = None) -> None:
     con.execute("INSERT INTO hendelser (slug, tid, type, lenke, tekst, detaljer) "
-                "VALUES (?, datetime('now','localtime'), ?, ?, ?, ?)",
-                (slug, type_, lenke, tekst, json.dumps(detaljer or {}, ensure_ascii=False)))
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (slug, naa(), type_, lenke, tekst, json.dumps(detaljer or {}, ensure_ascii=False)))
 
 
 def ok(con: sqlite3.Connection, sql: str, args: tuple = ()) -> list[dict]:
