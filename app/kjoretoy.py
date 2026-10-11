@@ -77,6 +77,13 @@ def _g(d, *sti, default=None):
     return default if d is None else d
 
 
+def _dato(verdi) -> str | None:
+    """Vegvesenet blander «2023-08-30» og «2023-08-30T16:17:03.444+02:00»; vi viser bare datoen."""
+    if not verdi:
+        return None
+    return str(verdi)[:10]
+
+
 def normaliser(data: dict, regnr: str | None = None) -> dict:
     if not isinstance(data, dict):
         raise Oppslagsfeil("Uventet svar fra Vegvesenet.")
@@ -113,9 +120,9 @@ def normaliser(data: dict, regnr: str | None = None) -> dict:
         "forste_registrert": forste,
         "forste_registrert_norge": norge if (norge and ((opprinnelig and norge != opprinnelig)
                                              or _g(k, "godkjenning", "forstegangsGodkjenning", "bruktimport"))) else None,
-        "registrert_paa_eier": _g(k, "registrering", "registrertForstegangPaEierskap"),
+        "registrert_paa_eier": _dato(_g(k, "registrering", "registrertForstegangPaEierskap")),
         "status": _g(k, "registrering", "registreringsstatus", "kodeNavn"),
-        "avregistrert": _g(k, "registrering", "avregistrertSidenDato"),
+        "avregistrert": _dato(_g(k, "registrering", "avregistrertSidenDato")),
         "drivstoff": ", ".join(dict.fromkeys(drivstoff)) or None,
         "elektrisk": bool(_g(td, "motorOgDrivverk", "utelukkendeElektriskDrift", default=False)),
         "hybrid": bool(_g(td, "motorOgDrivverk", "hybridElektriskKjoretoy", default=False)),

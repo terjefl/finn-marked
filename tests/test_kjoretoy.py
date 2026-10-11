@@ -25,7 +25,7 @@ def sjekk(navn: str, faktisk, ventet) -> None:
 SVAR = {"kjoretoydataListe": [{
     "kjoretoyId": {"kjennemerke": "EB12345", "understellsnummer": "WBY31AW0X0FL12345"},
     "forstegangsregistrering": {"registrertForstegangNorgeDato": "2022-03-18"},
-    "registrering": {"registrertForstegangPaEierskap": "2024-06-01",
+    "registrering": {"registrertForstegangPaEierskap": "2024-06-01T16:17:03.444+02:00",
                      "registreringsstatus": {"kodeNavn": "Registrert"}},
     "periodiskKjoretoyKontroll": {"kontrollfrist": "2026-03-18"},
     "godkjenning": {"tekniskGodkjenning": {"tekniskeData": {
