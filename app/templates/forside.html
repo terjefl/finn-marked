@@ -24,7 +24,7 @@
     <div><div class="dempet">Til salgs</div><div class="nokkel">{{ r.oppsummering.antall }}</div>
          <div class="dempet">{{ r.oppsummering.antall_pris }} med utropspris{% if r.oppsummering.antall_bud %} · {{ r.oppsummering.antall_bud }} på auksjon{% endif %}</div></div>
     <div><div class="dempet">Median utropspris</div>
-         <div class="nokkel">{{ "{:,.0f}".format(r.oppsummering.median).replace(",", " ") if r.oppsummering.median else "–" }}</div></div>
+         <div class="nokkel">{{ r.oppsummering.median | kr }}</div></div>
     <div><div class="dempet">Nye siste 7 dager</div><div class="nokkel">{{ r.nye_uke }}</div></div>
     <div><div class="dempet">Solgt (registrert)</div><div class="nokkel">{{ r.solgte }}</div></div>
   </div>

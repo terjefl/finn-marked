@@ -24,11 +24,26 @@ def linjereg(x: list[float], y: list[float]) -> tuple[float, float, float]:
 
 
 def kr(n) -> str:
-    return "–" if n is None else f"{n:,.0f}".replace(",", " ")
+    """Tall i norsk stil med mellomrom som tusenskille, «–» når det ikke finnes.
+
+    Brukes både direkte og som Jinja-filter (`| kr` i malene), derfor tåler den
+    også Jinja sin «undefined».
+    """
+    if n is None or n == "":
+        return "–"
+    try:
+        return f"{n:,.0f}".replace(",", " ")
+    except (TypeError, ValueError):
+        return "–"
 
 
 def km_str(n) -> str:
-    return "–" if n is None else f"{n:,}".replace(",", " ") + " km"
+    if n is None or n == "":
+        return "–"
+    try:
+        return f"{n:,}".replace(",", " ") + " km"
+    except (TypeError, ValueError):
+        return "–"
 
 
 def er_utropspris(a: dict) -> bool:
@@ -106,7 +121,8 @@ def historikk(con, slug: str, dager: int = 120) -> list[dict]:
 def svg_kurve(annonser: list[dict], egen_km: int | None = None,
               bredde: int = 720, hoyde: int = 380, m: int = 58) -> str:
     """Pris mot kilometerstand som inline-SVG. Fargelegger kategori hvis satt."""
-    par = [(a["km"], a["pris"], a) for a in annonser if a.get("km") and a.get("pris")]
+    par = [(a["km"], a["pris"], a) for a in annonser
+           if a.get("km") and a.get("pris") and er_utropspris(a)]
     if not par:
         return "<p>Ingen annonser med både pris og kilometerstand.</p>"
     xs = [p[0] for p in par]
@@ -141,6 +157,42 @@ def svg_kurve(annonser: list[dict], egen_km: int | None = None,
             f'<text x="{bredde/2}" y="{hoyde-6}" text-anchor="middle" fill="var(--muted-foreground)" '
             f'font-size="12">Kilometerstand</text>'
             f'<text x="12" y="18" fill="var(--muted-foreground)" font-size="12">Utropspris</text></svg>')
+
+
+def svg_historikk(kjoringer: list[dict], bredde: int = 720, hoyde: int = 220, m: int = 58) -> str:
+    """Median utropspris per henting som enkel SVG-linje (én prikk per kjøring).
+
+    Tabellen under viser de samme tallene, men en linje gjør utviklingen over
+    måneder lesbar uten å bla.
+    """
+    ser = [(k["dato"], k["median"]) for k in kjoringer if k.get("median")]
+    if len(ser) < 2:
+        return '<p class="dempet">For få hentinger med median ennå — linja tegnes fra andre kjøring.</p>'
+    ys = [p[1] for p in ser]
+    y0, y1 = min(ys) * 0.97, max(ys) * 1.03
+    if y1 <= y0:
+        y1 = y0 + 1
+    sx = lambda i: m + i / (len(ser) - 1) * (bredde - 2 * m)          # noqa: E731
+    sy = lambda y: hoyde - m - (y - y0) / (y1 - y0) * (hoyde - 2 * m)  # noqa: E731
+    grid = ""
+    for i in range(3):
+        yv = y0 + (y1 - y0) * i / 2
+        grid += (f'<line x1="{m}" y1="{sy(yv):.0f}" x2="{bredde-m}" y2="{sy(yv):.0f}" '
+                 f'stroke="var(--border)" stroke-width="1"/>'
+                 f'<text x="{m-8}" y="{sy(yv)+4:.0f}" text-anchor="end" '
+                 f'fill="var(--muted-foreground)" font-size="11">{_esc(kr(int(yv)))}</text>')
+    linje = " ".join(f"{sx(i):.0f},{sy(p[1]):.0f}" for i, p in enumerate(ser))
+    punkter = "".join(
+        f'<circle cx="{sx(i):.0f}" cy="{sy(p[1]):.0f}" r="3.5" fill="var(--accent)" opacity=".8">'
+        f'<title>{_esc(str(p[0]))} — {_esc(kr(p[1]))}</title></circle>' for i, p in enumerate(ser))
+    return (f'<svg viewBox="0 0 {bredde} {hoyde}" style="width:100%;height:auto">{grid}'
+            f'<polyline points="{linje}" fill="none" stroke="var(--accent)" stroke-width="1.5"/>{punkter}'
+            f'<text x="{m}" y="{hoyde-6}" fill="var(--muted-foreground)" font-size="11">'
+            f'{_esc(str(ser[0][0])[:10])}</text>'
+            f'<text x="{bredde-m}" y="{hoyde-6}" text-anchor="end" fill="var(--muted-foreground)" '
+            f'font-size="11">{_esc(str(ser[-1][0])[:10])}</text>'
+            f'<text x="12" y="18" fill="var(--muted-foreground)" font-size="12">'
+            f'Median utropspris per henting</text></svg>')
 
 
 def _t(a: dict) -> str:
