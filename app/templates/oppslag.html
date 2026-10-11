@@ -16,7 +16,7 @@
   <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center">
     <div>
       <div class="dempet">{{ kj.regnr }}{% if kj.understellsnummer %} · {{ kj.understellsnummer }}{% endif %}</div>
-      <div style="font-size:22px; font-weight:700; letter-spacing:-.01em">{{ kj.beskrivelse or '(ukjent)' }}</div>
+      <div style="font-size:22px; font-weight:700; letter-spacing:-.01em">{{ kj.beskrivelse or '(ukjent)' }}{% if kj.importland or kj.forste_registrert_norge %} <span class="pill v2" style="vertical-align:middle">bruktimport</span>{% endif %}</div>
       <div class="dempet">
         {% if kj.drivstoff %}{{ kj.drivstoff }}{% endif %}
         {% if kj.effekt_kw %} · {{ (kj.effekt_kw * 1.36) | round | int }} hk ({{ kj.effekt_kw | round | int }} kW){% endif %}
@@ -32,10 +32,14 @@
   <div class="kort">
     <h3 style="margin-top:0">Registrering</h3>
     <table>
-      <tr><td class="dempet">Først registrert</td><td>{{ kj.forste_registrert or '–' }}{% if kj.forste_registrert_norge %} <span class="dempet">(i utlandet; i Norge {{ kj.forste_registrert_norge }})</span>{% endif %}</td></tr>
+      {% if kj.importland or kj.forste_registrert_norge %}
+      <tr><td class="dempet">Først registrert</td><td>{{ kj.forste_registrert or '–' }}{% if kj.importland %} <span class="dempet">({{ kj.importland | capitalize }})</span>{% endif %}</td></tr>
+      <tr><td class="dempet">Importert til Norge</td><td><strong>Bruktimport</strong>{% if kj.importland %} fra {{ kj.importland | capitalize }}{% endif %}, registrert {{ kj.forste_registrert_norge or '–' }}{% if kj.importert_km %} med {{ kj.importert_km | kr }} km{% endif %}</td></tr>
+      {% else %}
+      <tr><td class="dempet">Først registrert</td><td>{{ kj.forste_registrert or '–' }}</td></tr>
+      {% endif %}
       <tr><td class="dempet">På nåværende eier siden</td><td>{{ kj.registrert_paa_eier or '–' }}</td></tr>
       <tr><td class="dempet">Status</td><td>{{ kj.status or '–' }}{% if kj.avregistrert %} (siden {{ kj.avregistrert }}){% endif %}</td></tr>
-      {% if kj.importland %}<tr><td class="dempet">Bruktimport</td><td>{{ kj.importland }}{% if kj.importert_km %}, {{ kj.importert_km | kr }} km ved import{% endif %}</td></tr>{% endif %}
       <tr><td class="dempet">EU-kontroll</td><td>{% if kj.eu_frist %}frist <strong>{{ kj.eu_frist }}</strong>{% endif %}{% if kj.eu_sist %} · sist godkjent {{ kj.eu_sist }}{% endif %}{% if not kj.eu_frist and not kj.eu_sist %}–{% endif %}</td></tr>
     </table>
   </div>

@@ -111,7 +111,8 @@ def normaliser(data: dict, regnr: str | None = None) -> dict:
         "typebetegnelse": gen.get("typebetegnelse"),
         "aar": int(forste[:4]) if forste and forste[:4].isdigit() else None,
         "forste_registrert": forste,
-        "forste_registrert_norge": norge if (norge and opprinnelig and norge != opprinnelig) else None,
+        "forste_registrert_norge": norge if (norge and ((opprinnelig and norge != opprinnelig)
+                                             or _g(k, "godkjenning", "forstegangsGodkjenning", "bruktimport"))) else None,
         "registrert_paa_eier": _g(k, "registrering", "registrertForstegangPaEierskap"),
         "status": _g(k, "registrering", "registreringsstatus", "kodeNavn"),
         "avregistrert": _g(k, "registrering", "avregistrertSidenDato"),
