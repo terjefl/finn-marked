@@ -87,6 +87,7 @@ GET /api/vakt/<slug>                         full markedsdata for én vakt
 GET /api/vakt/<slug>/annonser.json           annonser (valgfritt ?kategori=)
 GET /api/forhandsvis?url=…                   første side av et søk (til «Ny vakt»)
 GET /api/kjoretoy?regnr=…                    egen bil fra Statens vegvesen
+GET /api/sokforslag?regnr=…                  FINN-søk foreslått fra registreringsnummer
 GET /helse                                   helsesjekk (Docker healthcheck) + scheduler-tilstand, åpen
 ```
 
@@ -136,11 +137,14 @@ python3 tests/test_kjoretoy.py
 
 ## Nye vakter: søk og kategorier
 
-«Ny vakt» er to steg. Først limer du inn **én** søke-URL fra finn.no (eller
-auksjonen.no); appen henter første side med en gang og viser antall treff, noen
-eksempler og et forslag til navn og kortnavn («BMW i4 2022» fra vanligste tittel +
-`year_from`/`year_to`). Så får du hele skjemaet, forhåndsutfylt. Ved lagring starter
-første henting av seg selv.
+«Ny vakt» er to steg. Raskest er å skrive inn **registreringsnummeret** på bilen:
+Vegvesenet gir merke, modell og årsmodell, FINNs merke-/modelltre (JSON-API-et bak
+søkesiden, mellomlagret et døgn) gir koden, og appen lager søket
+`variant=<kode>&year_from=<år>&year_to=<år>` (pluss `fuel=4` for elbil). Treffer ikke
+modellnavnet, velger du modellen fra FINNs liste for merket. Alternativt limer du inn
+**én** søke-URL selv. Uansett henter appen første side med en gang og viser antall
+treff, eksempler og forslag til navn og kortnavn. Så får du hele skjemaet
+forhåndsutfylt, og ved lagring starter første henting av seg selv.
 
 **Søk** er rader med tag og URL. Kilden utledes av adressen (`auksjonen.no` →
 `auksjonen`, ellers `finn`) og kan overstyres per rad. Taggen merkes på annonsene

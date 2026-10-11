@@ -56,6 +56,8 @@ def hoved() -> int:
     sjekk("kategoriforslag tomt", analyse.kategoriforslag([], {}), [])
     sjekk("kategoriforslag tak (alle har det)", analyse.kategoriforslag([{"undertittel": "X"}] * 10, {}), [])
 
+    test_finn_koder()
+
     # Det gamle tekstformatet skal fortsatt parses (brukes av importeren og eldre klienter)
     sjekk("parse_sok", sok.parse_sok("fully | https://www.finn.no/mobility/search/car?q=fully")[0]["tag"], "fully")
 
@@ -65,6 +67,34 @@ def hoved() -> int:
         return 1
     print("alle tester OK")
     return 0
+
+
+
+# ----------------------------------------------------------------- FINN merke/modell
+
+def test_finn_koder() -> None:
+    from app.kilder import finn
+    tre = [
+        {"navn": "BMW", "kode": "0.749", "modeller": [
+            {"navn": "3-Serie", "kode": "1.749.2132"}, {"navn": "i4", "kode": "1.749.8308"},
+            {"navn": "iX-Serie", "kode": "1.749.9"}, {"navn": "i3-serie", "kode": "1.749.10"}]},
+        {"navn": "Volkswagen", "kode": "0.817", "modeller": [
+            {"navn": "ID.4", "kode": "1.817.8392"}, {"navn": "ID.4 GTX", "kode": "1.817.2000553"},
+            {"navn": "Golf-Serie", "kode": "1.817.1433"}]},
+        {"navn": "Mercedes-Benz", "kode": "0.785", "modeller": [{"navn": "EQC-Klasse", "kode": "1.785.1"}]},
+    ]
+    f = lambda m, mo: finn.finn_merke_og_modell(m, mo, tre)  # noqa: E731
+    sjekk("merke eksakt, modell eksakt (I4→i4)", f("BMW", "I4")["modell"]["kode"], "1.749.8308")
+    sjekk("ID.4 velger ikke GTX", f("VOLKSWAGEN", "ID.4")["modell"]["navn"], "ID.4")
+    sjekk("ID.4 GTX velger GTX", f("VOLKSWAGEN", "ID.4 GTX")["modell"]["navn"], "ID.4 GTX")
+    sjekk("serie-stamme 320D→3-Serie", f("BMW", "320D")["modell"]["navn"], "3-Serie")
+    sjekk("serie-stamme IX3→iX-Serie", f("BMW", "IX3")["modell"]["navn"], "iX-Serie")
+    sjekk("klasse-stamme EQC", f("MERCEDES-BENZ", "EQC")["modell"]["navn"], "EQC-Klasse")
+    sjekk("ukjent modell gir merke + liste", (f("BMW", "Z9")["modell"], len(f("BMW", "Z9")["modeller"])), (None, 4))
+    sjekk("ukjent merke", f("Lada", "Niva"), {"merke": None, "modell": None, "modeller": []})
+    sjekk("sok_url", finn.sok_url("1.749.8308", 2022, True),
+          "https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&fuel=4")
+    sjekk("sok_url uten år", finn.sok_url("0.749"), "https://www.finn.no/mobility/search/car?variant=0.749")
 
 
 if __name__ == "__main__":

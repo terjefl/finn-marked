@@ -206,7 +206,7 @@ def _brukervalg(con, b: dict) -> list[dict]:
 
 @app.get("/vakt/ny", response_class=HTMLResponse)
 def ny_vakt(request: Request, url: str | None = None, navn: str = "", slug: str = "", eier: str = "",
-            con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+            regnr: str = "", con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     """Steg 1 (uten url): lim inn én søke-URL, få forhåndsvisning og navneforslag.
     Steg 2 (med url): fullt skjema, forhåndsutfylt med søket og forslagene fra steg 1."""
     valgt_eier = int(eier) if (auth.er_admin(b) and eier.isdigit()) else b["id"]
@@ -218,6 +218,15 @@ def ny_vakt(request: Request, url: str | None = None, navn: str = "", slug: str 
     k = _skjema_kontekst(None)
     k["skjema"].update({"navn": navn, "slug": slug or sokmod.slugify(navn), "eier": valgt_eier,
                         "sok": [{"tag": "alle" if kilde == "finn" else kilde, "url": url, "kilde": kilde, "auto": True}]})
+    if regnr.strip():
+        # Fra «Ny vakt fra registreringsnummer»: bilen er alt slått opp i steg 1, vis den i skjemaet.
+        k["skjema"]["regnr"] = regnr.strip().upper()
+        try:
+            kj = kjoretoy.slaa_opp(regnr)
+            k["skjema"]["kjoretoy"] = kj
+            k["skjema"]["egen_bil"] = kj["beskrivelse"]
+        except kjoretoy.Oppslagsfeil:
+            pass
     k["brukere"] = _brukervalg(con, b)
     return templates.TemplateResponse(request, "rediger.html", k)
 
@@ -229,6 +238,33 @@ def api_kjoretoy(regnr: str, b: dict = Depends(bruker)):
         return {"kjoretoy": kjoretoy.slaa_opp(regnr)}
     except kjoretoy.Oppslagsfeil as e:
         return {"feil": str(e)}
+
+
+@app.get("/api/sokforslag")
+def api_sokforslag(regnr: str, b: dict = Depends(bruker)):
+    """«Ny vakt» fra registreringsnummer: Vegvesenet gir merke/modell/år, FINNs
+    merketre gir koden, og ut kommer et forslag til søke-URL pluss modellisten
+    for merket (til å velge selv når treffet er usikkert)."""
+    from .kilder import finn as finn_kilde
+    try:
+        kj = kjoretoy.slaa_opp(regnr)
+    except kjoretoy.Oppslagsfeil as e:
+        return {"feil": str(e)}
+    try:
+        treff = finn_kilde.finn_merke_og_modell(kj.get("merke"), kj.get("modell"))
+    except RuntimeError as e:
+        return {"feil": f"Fikk ikke merke-/modellisten fra FINN: {e}", "kjoretoy": kj}
+    if not treff["merke"]:
+        return {"feil": f"Fant ikke merket «{kj.get('merke')}» hos FINN.", "kjoretoy": kj}
+    valgt = treff["modell"] or treff["merke"]
+    navn = " ".join(x for x in (treff["merke"]["navn"], treff["modell"]["navn"] if treff["modell"] else None,
+                                str(kj["aar"]) if kj.get("aar") else None) if x)
+    return {"kjoretoy": kj, "merke": treff["merke"], "modell": treff["modell"], "modeller": treff["modeller"],
+            "aar": kj.get("aar"), "elektrisk": kj.get("elektrisk"),
+            "url": finn_kilde.sok_url(valgt["kode"], kj.get("aar"), bool(kj.get("elektrisk"))),
+            "navn": navn, "slug": sokmod.slugify(navn),
+            "advarsel": None if treff["modell"] else
+            f"Fant ikke modellen «{kj.get('modell')}» i FINNs liste for {treff['merke']['navn']} — velg under."}
 
 
 @app.get("/api/forhandsvis")

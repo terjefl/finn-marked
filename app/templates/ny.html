@@ -6,7 +6,19 @@
   adressefeltet og lim den inn her. Appen sjekker søket med en gang og foreslår navn.</p>
 
 <form method="get" action="/vakt/ny" class="kort" id="skjema">
-  <label for="url" style="margin-top:0">Søke-URL fra finn.no eller auksjonen.no</label>
+  <label for="regnr" style="margin-top:0">Raskest: registreringsnummeret på bilen du vil følge markedet for</label>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+    <input type="text" id="regnr" name="regnr" placeholder="EB12345" autocapitalize="characters" style="max-width:160px">
+    <button type="button" class="lett" id="fra-regnr">Finn søket</button>
+    <span class="dempet" id="regnr-info"></span>
+  </div>
+  <div id="modellvalg" hidden style="margin-top:8px">
+    <label for="modell" style="margin-top:0">Modell hos FINN</label>
+    <select id="modell"></select>
+  </div>
+  <p class="dempet" style="margin:10px 0 0">Vegvesenet gir merke, modell og årsmodell; FINN-søket lages av det.
+    Eller lim inn et søk du har laget selv:</p>
+  <label for="url">Søke-URL fra finn.no eller auksjonen.no</label>
   <div style="display:flex; gap:8px; flex-wrap:wrap">
     <input type="url" id="url" name="url" required placeholder="https://www.finn.no/mobility/search/car?…" style="flex:1; min-width:260px">
     <button type="button" class="lett" id="sjekk">Sjekk søket</button>
@@ -36,6 +48,8 @@
   const url = document.getElementById('url'), feil = document.getElementById('feil');
   const res = document.getElementById('resultat'), videre = document.getElementById('videre');
   const kr = n => n == null ? '–' : Math.round(n).toLocaleString('nb-NO').replace(/,/g, ' ');
+  const slugify = t => t.toLowerCase().replace(/æ/g,'ae').replace(/ø/g,'oe').replace(/å/g,'aa')
+    .replace(/[^a-z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   let sjekket = '';
   async function sjekk() {
     feil.textContent = ''; res.hidden = true; videre.disabled = true;
@@ -50,15 +64,56 @@
       if (d.advarsel) return;
       document.getElementById('treff').textContent = d.treff;
       document.getElementById('sider').textContent = d.sider + (d.sider == 1 ? ' side' : ' sider') + ' · ' + d.kilde;
-      document.getElementById('navnvis').textContent = d.navn || '(fyll inn selv)';
-      document.getElementById('slugvis').textContent = d.slug ? '/vakt/' + d.slug : '';
-      document.getElementById('navn').value = d.navn; document.getElementById('slug').value = d.slug;
+      const navnFelt = document.getElementById('navn');
+      if (!navnFelt.value) navnFelt.value = d.navn;
+      document.getElementById('navnvis').textContent = navnFelt.value || '(fyll inn selv)';
+      document.getElementById('slug').value = slugify(navnFelt.value);
+      document.getElementById('slugvis').textContent = navnFelt.value ? '/vakt/' + slugify(navnFelt.value) : '';
       document.getElementById('eks').innerHTML = d.eksempler.map(a =>
         `<tr><td><a href="${a.url}" target="_blank">${a.tittel || ''} ${a.undertittel || ''}</a></td><td>${kr(a.pris)}</td><td>${kr(a.km)}</td><td>${a.aar || '–'}</td></tr>`).join('')
         || '<tr><td colspan="4" class="dempet">Ingen annonser på første side.</td></tr>';
       res.hidden = false; videre.disabled = false; sjekket = u;
     } catch (e) { feil.textContent = 'Kunne ikke sjekke søket: ' + e.message; }
   }
+  // Fra registreringsnummer: Vegvesenet → FINN-kode → URL → vanlig forhåndsvisning.
+  const regnr = document.getElementById('regnr'), rinfo = document.getElementById('regnr-info');
+  const modellvalg = document.getElementById('modellvalg'), modell = document.getElementById('modell');
+  let forslag = null;
+  function byggUrl() {
+    if (!forslag) return;
+    const kode = modell.value || (forslag.merke && forslag.merke.kode);
+    let u = 'https://www.finn.no/mobility/search/car?variant=' + kode;
+    if (forslag.aar) u += '&year_from=' + forslag.aar + '&year_to=' + forslag.aar;
+    if (forslag.elektrisk) u += '&fuel=4';
+    url.value = u;
+    const valgtNavn = modell.selectedOptions[0] ? modell.selectedOptions[0].textContent : '';
+    document.getElementById('navn').value = [forslag.merke.navn, valgtNavn, forslag.aar || ''].filter(Boolean).join(' ');
+    sjekk();
+  }
+  async function fraRegnr() {
+    const r = regnr.value.trim();
+    if (!r) return;
+    rinfo.textContent = 'Slår opp hos Vegvesenet og FINN …'; modellvalg.hidden = true; forslag = null;
+    try {
+      const res = await fetch('/api/sokforslag?regnr=' + encodeURIComponent(r));
+      const d = await res.json();
+      if (d.feil && !d.modeller) { rinfo.textContent = d.feil; return; }
+      forslag = d;
+      rinfo.textContent = (d.kjoretoy && d.kjoretoy.beskrivelse) ? d.kjoretoy.beskrivelse + (d.advarsel ? ' — ' + d.advarsel : '') : (d.feil || '');
+      modell.innerHTML = '<option value="">Alle modeller fra ' + d.merke.navn + '</option>' +
+        d.modeller.map(m => `<option value="${m.kode}" ${d.modell && d.modell.kode === m.kode ? 'selected' : ''}>${m.navn}</option>`).join('');
+      modellvalg.hidden = false;
+      byggUrl();
+    } catch (e) { rinfo.textContent = 'Oppslaget feilet: ' + e.message; }
+  }
+  document.getElementById('fra-regnr').addEventListener('click', fraRegnr);
+  regnr.addEventListener('change', fraRegnr);
+  modell.addEventListener('change', byggUrl);
+  url.addEventListener('input', () => {
+    if (forslag && !url.value.includes('variant=')) { forslag = null; modellvalg.hidden = true; }
+    if (!forslag) document.getElementById('navn').value = '';   // navnet skal komme fra det nye søket
+  });
+
   document.getElementById('sjekk').addEventListener('click', sjekk);
   url.addEventListener('change', sjekk);
   url.addEventListener('paste', () => setTimeout(sjekk, 50));

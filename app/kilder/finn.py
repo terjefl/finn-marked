@@ -254,3 +254,97 @@ class FinnKilde:
 from . import registrer  # noqa: E402  (sirkulær import er trygg her: pakken er lastet)
 
 registrer(FinnKilde())
+
+
+# ------------------------------------------------------------------ merke/modell-koder
+
+#: FINNs JSON-API bak søkesiden. Gir blant annet filteret «variant» = hele treet av
+#: merker (0.<kode>) og modeller (1.<merke>.<kode>) med visningsnavn.
+API_SOK = "https://www.finn.no/mobility/search/api/search/SEARCH_ID_CAR_USED"
+_merketre: dict = {"hentet": 0.0, "merker": []}
+MERKETRE_LEVETID = 24 * 3600
+
+
+def _normaliser_navn(s: str | None) -> str:
+    return re.sub(r"[^a-z0-9æøå]", "", (s or "").lower())
+
+
+def hent_merketre(tving: bool = False) -> list[dict]:
+    """[{navn, kode, modeller: [{navn, kode}]}] fra FINN, mellomlagret et døgn."""
+    import json as _json
+    if not tving and _merketre["merker"] and time.monotonic() - _merketre["hentet"] < MERKETRE_LEVETID:
+        return _merketre["merker"]
+    rå = hent(API_SOK + "?q=")
+    data = _json.loads(rå)
+    filtre = {f.get("name"): f for f in data.get("filters") or []}
+    merker = []
+    for m in (filtre.get("variant") or {}).get("filter_items") or []:
+        merker.append({"navn": m.get("display_name"), "kode": m.get("value"),
+                       "modeller": [{"navn": x.get("display_name"), "kode": x.get("value")}
+                                    for x in (m.get("filter_items") or [])]})
+    if not merker:
+        raise RuntimeError("FINN svarte uten merke-/modellfilter — API-et kan ha endret seg")
+    _merketre.update(hentet=time.monotonic(), merker=merker)
+    return merker
+
+
+def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] | None = None) -> dict:
+    """Mapper Vegvesenets merke/modell («BMW», «I4») til FINNs koder.
+
+    Returnerer {merke: {navn,kode}|None, modell: {navn,kode}|None, modeller: [...]} —
+    `modeller` er alle FINN-modellene for merket, så skjemaet kan la brukeren velge
+    når treffet er usikkert. Modell-match: eksakt normalisert navn, ellers det
+    lengste FINN-navnet som er inneholdt i Vegvesenets (eller omvendt).
+    """
+    tre = tre if tre is not None else hent_merketre()
+    nm = _normaliser_navn(merke)
+    m_treff = None
+    if nm:
+        for m in tre:
+            if _normaliser_navn(m["navn"]) == nm:
+                m_treff = m
+                break
+        if not m_treff:
+            kand = [m for m in tre if _normaliser_navn(m["navn"]) and
+                    (nm.startswith(_normaliser_navn(m["navn"])) or _normaliser_navn(m["navn"]).startswith(nm))]
+            m_treff = max(kand, key=lambda m: len(m["navn"])) if kand else None
+    if not m_treff:
+        return {"merke": None, "modell": None, "modeller": []}
+    modeller = m_treff["modeller"]
+    nmo = _normaliser_navn(modell)
+    mo_treff = None
+    if nmo:
+        eksakt = [x for x in modeller if _normaliser_navn(x["navn"]) == nmo]
+        if eksakt:
+            mo_treff = eksakt[0]
+        else:
+            kand = [x for x in modeller if _normaliser_navn(x["navn"]) and
+                    (nmo.startswith(_normaliser_navn(x["navn"])) or _normaliser_navn(x["navn"]).startswith(nmo))]
+            # Foretrekk det lengste navnet som fortsatt er et prefiks av Vegvesenets («ID.4» før «ID.4 GTX»
+            # når Vegvesenet sier «ID.4»; «ID.4 GTX» når Vegvesenet sier «ID.4 GTX»).
+            kand = [x for x in kand if nmo.startswith(_normaliser_navn(x["navn"]))] or kand
+            mo_treff = max(kand, key=lambda x: len(x["navn"])) if kand else None
+        if not mo_treff:
+            # Serie-navn: FINN sier «3-Serie», «Q4-Serie», «iX-Serie», «EQC-Klasse» der Vegvesenet
+            # sier «320D», «Q4 E-TRON», «IX3», «EQC». Match på stammen foran -Serie/-Klasse.
+            stammer = []
+            for x in modeller:
+                m = re.match(r"^(.+?)[\s-]*(serie|klasse)$", x["navn"], re.I)
+                if m:
+                    stammer.append((_normaliser_navn(m.group(1)), x))
+            kand2 = [(st, x) for st, x in stammer if st and nmo.startswith(st)]
+            if kand2:
+                mo_treff = max(kand2, key=lambda p: len(p[0]))[1]
+    return {"merke": {"navn": m_treff["navn"], "kode": m_treff["kode"]},
+            "modell": ({"navn": mo_treff["navn"], "kode": mo_treff["kode"]} if mo_treff else None),
+            "modeller": modeller}
+
+
+def sok_url(kode: str, aar: int | None = None, elektrisk: bool = False) -> str:
+    """FINN-søk for en merke-/modellkode, valgfritt låst til årsmodell og el."""
+    url = f"https://www.finn.no/mobility/search/car?variant={kode}"
+    if aar:
+        url += f"&year_from={aar}&year_to={aar}"
+    if elektrisk:
+        url += "&fuel=4"
+    return url
