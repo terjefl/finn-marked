@@ -464,11 +464,11 @@ def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] 
             "modeller": modeller}
 
 
-def sok_url(kode: str, aar: int | None = None, elektrisk: bool = False) -> str:
-    """FINN-søk for en merke-/modellkode, valgfritt låst til årsmodell og el."""
+def sok_url(kode: str, aar: int | None = None, elektrisk: bool = False, aar_til: int | None = None) -> str:
+    """FINN-søk for en merke-/modellkode, valgfritt låst til årsmodell (eller et spenn) og el."""
     url = f"https://www.finn.no/mobility/search/car?variant={kode}"
     if aar:
-        url += f"&year_from={aar}&year_to={aar}"
+        url += f"&year_from={aar}&year_to={aar_til or aar}"
     if elektrisk:
         url += "&fuel=4"
     return url

@@ -44,7 +44,8 @@
     <table>
       <tr><td class="dempet">Merke / modell</td><td>{{ kj.merke or '–' }} {{ kj.modell or '' }}</td></tr>
       <tr><td class="dempet">Typebetegnelse</td><td>{{ kj.typebetegnelse or '–' }}</td></tr>
-      <tr><td class="dempet">Registreringsår</td><td>{{ kj.aar or '–' }} <span class="dempet">(registeret har ikke modellår)</span></td></tr>
+      <tr><td class="dempet">Modellår</td><td>{% if kj.modellaar %}{{ kj.modellaar }} <span class="dempet">(fra understellsnummeret)</span>{% else %}– <span class="dempet">(ikke i registeret)</span>{% endif %}</td></tr>
+      <tr><td class="dempet">Registreringsår</td><td>{{ kj.aar or '–' }}</td></tr>
       <tr><td class="dempet">Klasse</td><td>{{ kj.klasse or '–' }}</td></tr>
       <tr><td class="dempet">Karosseri</td><td>{{ kj.karosseri or '–' }}{% if kj.seter %} · {{ kj.seter }} seter{% endif %}</td></tr>
       <tr><td class="dempet">Farge</td><td>{{ kj.farge or '–' }}</td></tr>

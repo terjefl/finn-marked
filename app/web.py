@@ -287,11 +287,18 @@ def api_sokforslag(regnr: str, b: dict = Depends(bruker)):
     if not treff["merke"]:
         return {"feil": f"Fant ikke merket «{kj.get('merke')}» hos FINN.", "kjoretoy": kj}
     valgt = treff["modell"] or treff["merke"]
+    # FINN-selgere oppgir som regel registreringsåret som årsmodell, men en bil registrert
+    # på høsten er ofte neste års modell (VIN). Spriker de, dekker søket begge årene.
+    aar_r, aar_m = kj.get("aar"), kj.get("modellaar")
+    aar_fra = min(x for x in (aar_r, aar_m) if x) if (aar_r or aar_m) else None
+    aar_til = max(x for x in (aar_r, aar_m) if x) if (aar_r or aar_m) else None
+    aarstekst = (str(aar_fra) if aar_fra == aar_til else f"{aar_fra}–{aar_til}") if aar_fra else None
     navn = " ".join(x for x in (treff["merke"]["navn"], treff["modell"]["navn"] if treff["modell"] else None,
-                                str(kj["aar"]) if kj.get("aar") else None) if x)
+                                aarstekst) if x)
     return {"kjoretoy": kj, "merke": treff["merke"], "modell": treff["modell"], "modeller": treff["modeller"],
-            "aar": kj.get("aar"), "elektrisk": kj.get("elektrisk"),
-            "url": finn_kilde.sok_url(valgt["kode"], kj.get("aar"), bool(kj.get("elektrisk"))),
+            "aar": aar_r, "modellaar": aar_m, "aar_fra": aar_fra, "aar_til": aar_til,
+            "elektrisk": kj.get("elektrisk"),
+            "url": finn_kilde.sok_url(valgt["kode"], aar_fra, bool(kj.get("elektrisk")), aar_til),
             "navn": navn, "slug": sokmod.slugify(navn),
             "advarsel": None if treff["modell"] else
             f"Fant ikke modellen «{kj.get('modell')}» i FINNs liste for {treff['merke']['navn']} — velg under."}

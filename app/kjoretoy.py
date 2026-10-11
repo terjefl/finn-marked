@@ -133,8 +133,26 @@ def normaliser(data: dict, regnr: str | None = None) -> dict:
         "importert_km": _g(k, "godkjenning", "forstegangsGodkjenning", "bruktimport", "kilometerstand"),
         "importland": _g(k, "godkjenning", "forstegangsGodkjenning", "bruktimport", "importland", "landNavn"),
     }
+    ut["modellaar"] = modellaar_fra_vin(ut["understellsnummer"], ut["aar"])
     ut["beskrivelse"] = beskrivelse(ut)
     return ut
+
+
+_VIN_AAR = "ABCDEFGHJKLMNPRSTVWXY123456789"   # posisjon 10: A=2010 … Y=2030, 1=2031 …
+
+
+def modellaar_fra_vin(vin: str | None, reg_aar: int | None = None) -> int | None:
+    """Modellår fra posisjon 10 i understellsnummeret, slik Volkswagen, BMW, Tesla og de
+    fleste andre koder det. Ikke alle produsenter gjør det (EU krever det ikke), så verdien
+    godtas bare når den ligger innenfor ett år fra registreringsåret."""
+    v = (vin or "").strip().upper()
+    if len(v) < 10 or v[9] not in _VIN_AAR:
+        return None
+    i = _VIN_AAR.index(v[9])
+    aar = 2010 + i if i < 21 else 2031 + (i - 21)
+    if reg_aar and abs(aar - reg_aar) > 1:
+        return None
+    return aar
 
 
 def beskrivelse(kj: dict) -> str:
@@ -157,8 +175,10 @@ def beskrivelse(kj: dict) -> str:
     er_kode = bool(re.fullmatch(r"[0-9A-Z]{2,5}", typ)) and any(c.isdigit() for c in typ)
     if typ and not er_kode and typ.lower() not in modell.lower() and len(typ) <= 30:
         deler.append(typ)
-    if kj.get("aar"):
-        deler.append(str(kj["aar"]))
+    # Modellåret (fra VIN) er det folk kaller bilen; registreringsåret er reserven.
+    aar = kj.get("modellaar") or kj.get("aar")
+    if aar:
+        deler.append(str(aar))
     return " ".join(d for d in deler if d).strip()
 
 

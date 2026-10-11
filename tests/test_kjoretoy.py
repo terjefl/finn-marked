@@ -68,6 +68,11 @@ def hoved() -> int:
     sjekk("tilhengervekt", k["tilhengervekt"], 1600)
     sjekk("understellsnummer", k["understellsnummer"], "WBY31AW0X0FL12345")
     sjekk("seter/mål/dekk", (k["seter"], k["lengde"], k["dekk"]), (5, 4783, "245/40R19"))
+    sjekk("modellår fra VIN (J=2018, registrert 2017)", kjoretoy.modellaar_fra_vin("WV1ZZZ2KZJX026311", 2017), 2018)
+    sjekk("modellår fra VIN: P=2023", kjoretoy.modellaar_fra_vin("WBY31AW04PFN73190", 2022), 2023)
+    sjekk("modellår fra VIN: ugyldig tegn", kjoretoy.modellaar_fra_vin("WBY31AW04OFN73190", 2022), None)
+    sjekk("modellår fra VIN: for langt fra registreringsåret", kjoretoy.modellaar_fra_vin("WV1ZZZ2KZJX026311", 2010), None)
+    sjekk("fixture: modellår F=2015 avvist mot 2022", k["modellaar"], None)
     sjekk("typekode holdes ute av beskrivelsen",
           kjoretoy.beskrivelse({"merke": "VOLKSWAGEN", "modell": "CADDY", "typebetegnelse": "2KN", "aar": 2017}),
           "Volkswagen Caddy 2017")

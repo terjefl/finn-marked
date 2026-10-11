@@ -13,8 +13,15 @@
     <span class="dempet" id="regnr-info"></span>
   </div>
   <div id="modellvalg" hidden style="margin-top:8px">
-    <label for="modell" style="margin-top:0">Modell hos FINN</label>
-    <select id="modell"></select>
+    <div class="rutenett skjema">
+      <div><label for="modell" style="margin-top:0">Modell hos FINN</label><select id="modell"></select></div>
+      <div><label style="margin-top:0">Årsmodell fra – til</label>
+        <div style="display:flex; gap:6px; align-items:center">
+          <input type="number" id="aar_fra" min="1950" max="2100" style="max-width:110px"> –
+          <input type="number" id="aar_til" min="1950" max="2100" style="max-width:110px">
+        </div>
+        <div class="dempet" id="aarinfo"></div></div>
+    </div>
   </div>
   <p class="dempet" style="margin:10px 0 0">Vegvesenet gir merke, modell og årsmodell; FINN-søket lages av det.
     Eller lim inn et søk du har laget selv:</p>
@@ -79,17 +86,21 @@
   const regnr = document.getElementById('regnr'), rinfo = document.getElementById('regnr-info');
   const modellvalg = document.getElementById('modellvalg'), modell = document.getElementById('modell');
   let forslag = null;
+  const aarFra = document.getElementById('aar_fra'), aarTil = document.getElementById('aar_til');
   function byggUrl() {
     if (!forslag) return;
     const kode = modell.value || (forslag.merke && forslag.merke.kode);
     let u = 'https://www.finn.no/mobility/search/car?variant=' + kode;
-    if (forslag.aar) u += '&year_from=' + forslag.aar + '&year_to=' + forslag.aar;
+    const fra = +aarFra.value || 0, til = +aarTil.value || fra;
+    if (fra) u += '&year_from=' + fra + '&year_to=' + Math.max(fra, til);
     if (forslag.elektrisk) u += '&fuel=4';
     url.value = u;
     const valgtNavn = modell.selectedOptions[0] ? modell.selectedOptions[0].textContent : '';
-    document.getElementById('navn').value = [forslag.merke.navn, valgtNavn, forslag.aar || ''].filter(Boolean).join(' ');
+    const aar = fra ? (til > fra ? fra + '–' + til : String(fra)) : '';
+    document.getElementById('navn').value = [forslag.merke.navn, valgtNavn, aar].filter(Boolean).join(' ');
     sjekk();
   }
+  aarFra.addEventListener('change', byggUrl); aarTil.addEventListener('change', byggUrl);
   async function fraRegnr() {
     const r = regnr.value.trim();
     if (!r) return;
@@ -102,6 +113,10 @@
       rinfo.textContent = (d.kjoretoy && d.kjoretoy.beskrivelse) ? d.kjoretoy.beskrivelse + (d.advarsel ? ' — ' + d.advarsel : '') : (d.feil || '');
       modell.innerHTML = '<option value="">Alle modeller fra ' + d.merke.navn + '</option>' +
         d.modeller.map(m => `<option value="${m.kode}" ${d.modell && d.modell.kode === m.kode ? 'selected' : ''}>${m.navn}</option>`).join('');
+      aarFra.value = d.aar_fra || ''; aarTil.value = d.aar_til || '';
+      document.getElementById('aarinfo').textContent = d.modellaar && d.modellaar !== d.aar
+        ? 'Registrert ' + d.aar + ', modellår ' + d.modellaar + ' ifølge understellsnummeret — søket dekker begge.'
+        : (d.aar ? 'Registrert ' + d.aar + '.' : '');
       modellvalg.hidden = false;
       byggUrl();
     } catch (e) { rinfo.textContent = 'Oppslaget feilet: ' + e.message; }

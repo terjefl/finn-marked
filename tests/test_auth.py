@@ -99,7 +99,7 @@ def hoved() -> int:
             # «Ny vakt» fra registreringsnummer (Vegvesenet og FINN-treet stubbet)
             from app import kjoretoy as kjmod
             kjmod.slaa_opp = lambda regnr: {"regnr": "EB12345", "merke": "BMW", "modell": "I4", "aar": 2022,
-                                            "elektrisk": True, "beskrivelse": "BMW I4 M50 xDrive 2022"}
+                                            "modellaar": 2022, "elektrisk": True, "beskrivelse": "BMW I4 M50 xDrive 2022"}
             finn_kilde.hent_merketre = lambda tving=False: [
                 {"navn": "BMW", "kode": "0.749", "modeller": [{"navn": "i4", "kode": "1.749.8308"}]}]
             r = c.get("/oppslag", params={"regnr": "eb12345"})
@@ -111,6 +111,13 @@ def hoved() -> int:
             sjekk("sokforslag url", r["url"],
                   "https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&fuel=4")
             sjekk("sokforslag navn", (r["navn"], r["slug"], r["advarsel"]), ("BMW i4 2022", "bmw-i4-2022", None))
+            kjmod.slaa_opp = lambda regnr: {"regnr": "DR33567", "merke": "BMW", "modell": "I4", "aar": 2017,
+                                            "modellaar": 2018, "elektrisk": False, "beskrivelse": "x"}
+            r = c.get("/api/sokforslag", params={"regnr": "DR33567"}).json()
+            sjekk("sokforslag med sprikende år dekker begge", (r["url"].endswith("year_from=2017&year_to=2018"), r["navn"]),
+                  (True, "BMW i4 2017–2018"))
+            kjmod.slaa_opp = lambda regnr: {"regnr": "EB12345", "merke": "BMW", "modell": "I4", "aar": 2022,
+                                            "modellaar": 2022, "elektrisk": True, "beskrivelse": "BMW I4 M50 xDrive 2022"}
             r = c.get("/vakt/ny", params={"url": r["url"], "navn": "BMW i4 2022", "slug": "x", "regnr": "EB12345"})
             sjekk("steg 2 har regnr og egen bil", 'value="EB12345"' in r.text and 'value="BMW I4 M50 xDrive 2022"' in r.text, True)
 
