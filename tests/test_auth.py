@@ -143,11 +143,21 @@ def hoved() -> int:
             c.post("/vakt/lagre", data={"slug": "bmw-i4-2022", "navn": "BMW i4 2022 (endret)", "hentetime": "8",
                                         "sok_tag": "alle", "sok_url": "https://www.finn.no/mobility/search/car?a=1",
                                         "formaal": "kjoper", "krit_maks_pris": "450 000", "krit_maks_km": "60000",
-                                        "krit_aar_fra": "2022", "krit_kat": ["Fully Charged"]})
+                                        "krit_aar_fra": "2022", "krit_kat": ["Fully Charged"],
+                                        "varsle": "1", "varsel_typer": ["kandidat", "tull"]})
             with db.aapen() as con:
                 vk = db.vakt(con, "bmw-i4-2022")
                 sjekk("formål og kriterier lagret", (vk["formaal"], vk["kriterier"]),
                       ("kjoper", {"maks_pris": 450000, "maks_km": 60000, "aar_fra": 2022, "kategorier": ["Fully Charged"]}))
+                sjekk("varsling lagret (ukjent type filtrert)", vk["varsling"], {"aktiv": True, "typer": ["kandidat"]})
+            r = c.post("/konto/varsling", data={"epost": "terje@x.no", "pushover": "uABC", "varsel_epost": "1"})
+            sjekk("konto: varsling lagret", r.status_code, 303)
+            with db.aapen() as con:
+                u = auth.bruker(con, admin["id"])
+                sjekk("konto: kanaler", (u["epost"], u["pushover"], u["varsel_epost"]), ("terje@x.no", "uABC", 1))
+            sjekk("konto: test uten SMTP gir feilmelding",
+                  "Test+feilet" in c.post("/konto/varsling/test", data={"kanal": "epost"}).headers["location"]
+                  or "Test%20feilet" in c.post("/konto/varsling/test", data={"kanal": "epost"}).headers["location"], True)
             sjekk("kjøpersiden rendres", "Kandidater som oppfyller kriterierne" in c.get("/vakt/bmw-i4-2022").text
                   or "Kandidater" in c.get("/vakt/bmw-i4-2022").text, True)
             with db.aapen() as con:

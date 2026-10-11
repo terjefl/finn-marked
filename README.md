@@ -75,6 +75,19 @@ Miljøvariabler: `FINN_RP_ID` (vertsnavnet brukerne åpner, f.eks.
 utledes begge av forespørselen, som er greit lokalt (`localhost`), men sett dem i
 drift. Cloudflare Access foran tjenesten er uavhengig av dette og kan stå.
 
+## Varsling
+
+Ett varsel per henting når noe har skjedd. Kanalene er per bruker («Konto»):
+e-post, og Pushover-brukernøkkel som tillegg. Hva man varsles om er per bil
+(«Rediger» → Varsling): kandidater som oppfyller kjøpskriteriene, prisendringer,
+egen bil i markedet, solgte, alle nye. Standard for kjøper er kandidater og
+prisendringer, for eier egen bil og solgte.
+
+Tjeneren trenger `FINN_SMTP_HOST`, `FINN_SMTP_PORT` (587 STARTTLS / 465 SSL),
+`FINN_SMTP_BRUKER`, `FINN_SMTP_PASSORD`, `FINN_SMTP_FRA` og `FINN_BASE_URL`
+(lenker i varslene); for Pushover `FINN_PUSHOVER_TOKEN` (app-token). «Konto» har
+testknapper for begge kanalene. Uten oppsett virker alt annet som før.
+
 ## Egen bil fra registreringsnummer
 
 «Oppslag» i menyen slår opp et registreringsnummer uten å lage noe: merke/modell,

@@ -5,6 +5,31 @@
 {% if melding %}<p class="melding">{{ melding }}</p>{% endif %}
 
 <div class="kort">
+  <h2 style="margin-top:0">Varsling</h2>
+  <p class="dempet">Hva du varsles om velger du på hver bil du følger («Rediger» → Varsling). Her velger du kanalene.
+    Ett varsel per henting, bare når noe har skjedd.</p>
+  <form method="post" action="/konto/varsling">
+    <div class="rutenett skjema">
+      <div><label style="margin-top:0">E-postadresse</label>
+        <input type="text" name="epost" value="{{ konto.epost or '' }}" placeholder="deg@eksempel.no" inputmode="email">
+        <label class="valg" style="margin-top:8px"><input type="checkbox" name="varsel_epost" value="1" {{ 'checked' if konto.varsel_epost }}> Send varsler på e-post</label>
+        {% if not epost_oppsatt %}<div class="dempet" style="margin-top:6px">E-postutsending er ikke satt opp på tjeneren ennå (admin: FINN_SMTP_*).</div>{% endif %}</div>
+      <div><label style="margin-top:0">Pushover-brukernøkkel (valgfritt)</label>
+        <input type="text" name="pushover" value="{{ konto.pushover or '' }}" placeholder="u…" autocomplete="off">
+        <div class="dempet" style="margin-top:6px">Fra Pushover-appen. Varsler sendes dit i tillegg til e-post.
+          {% if not pushover_oppsatt %}Ikke satt opp på tjeneren ennå (admin: FINN_PUSHOVER_TOKEN).{% endif %}</div></div>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap">
+      <button>Lagre</button>
+    </div>
+  </form>
+  <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap">
+    <form method="post" action="/konto/varsling/test"><input type="hidden" name="kanal" value="epost"><button class="lett liten" {% if not epost_oppsatt or not konto.epost %}disabled{% endif %}>Send test på e-post</button></form>
+    <form method="post" action="/konto/varsling/test"><input type="hidden" name="kanal" value="pushover"><button class="lett liten" {% if not pushover_oppsatt or not konto.pushover %}disabled{% endif %}>Send test til Pushover</button></form>
+  </div>
+</div>
+
+<div class="kort">
   <h2 style="margin-top:0">Passkeys</h2>
   <div class="tabell"><table>
     <thead><tr><th>Navn</th><th>Opprettet</th><th>Sist brukt</th><th></th></tr></thead>

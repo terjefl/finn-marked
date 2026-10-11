@@ -13,7 +13,7 @@ import time
 import traceback
 from datetime import datetime
 
-from . import db, innsamling
+from . import db, innsamling, varsling
 
 log = logging.getLogger("finn.scheduler")
 
@@ -63,7 +63,14 @@ def _sjekk() -> None:
                     log.info("%s: hopper over — en henting kjører alt", v["slug"])
                     continue
                 try:
+                    fra_id = varsling.siste_hendelse_id(con, v["slug"])
                     res = innsamling.hent_vakt(con, v)
+                    try:
+                        vs = varsling.etter_henting(con, v, fra_id)
+                        if vs:
+                            logging.getLogger("finn-marked").info("%s: %s", v["slug"], vs)
+                    except Exception:  # noqa: BLE001 – varsling skal ikke stoppe de andre vaktene
+                        logging.getLogger("finn-marked").exception("varsling feilet for %s", v["slug"])
                     _state["siste_resultat"] = res
                     log.info("%s: %s", v["slug"], res.get("status"))
                     innsamling.berik_detaljer(con, v, grense=15)

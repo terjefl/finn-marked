@@ -15,6 +15,14 @@ services:
       # - FINN_OPPSETT_NOKKEL=
       # Statens vegvesen (egen bil fra registreringsnummer). Bestilles på vegvesen.no.
       # - FINN_SVV_NOKKEL=
+      # Varsling: e-post via SMTP (587 = STARTTLS, 465 = SSL) og valgfritt Pushover (app-token).
+      # - FINN_SMTP_HOST=smtp.eksempel.no
+      # - FINN_SMTP_PORT=587
+      # - FINN_SMTP_BRUKER=
+      # - FINN_SMTP_PASSORD=
+      # - FINN_SMTP_FRA=finn-marked@eksempel.no
+      # - FINN_PUSHOVER_TOKEN=
+      # - FINN_BASE_URL=https://bilmarked.flagan.net
     ports:
       - "8099:8000"
     volumes:

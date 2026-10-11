@@ -118,6 +118,18 @@
     </div>
   </div>
 
+  <div class="kort">
+    <h2 style="margin-top:0">Varsling</h2>
+    <label class="valg"><input type="checkbox" name="varsle" value="1" {{ 'checked' if skjema.varsling.aktiv }}> Varsle meg etter henting når noe har skjedd</label>
+    <div class="filtre" style="margin-top:10px">
+      {% for t, navn in varsel_typer.items() %}
+      <label class="valg"><input type="checkbox" name="varsel_typer" value="{{ t }}" {{ 'checked' if t in skjema.varsling.typer }}> {{ navn }}</label>
+      {% endfor %}
+    </div>
+    <p class="dempet">Kanalene (e-post, Pushover) velger du under «Konto». Standard for kjøper er kandidater og
+      prisendringer, for eier din egen bil og solgte.</p>
+  </div>
+
   <div class="kort" id="egen-bil-kort">
     <h2 style="margin-top:0"><span id="egen-tittel">{{ 'Egen bil og henting' if skjema.formaal == 'eier' else 'Henting' }}</span></h2>
     <div class="rutenett skjema">

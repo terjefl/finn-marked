@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import analyse, auth, db, innsamling, kjoretoy
+from . import analyse, auth, db, innsamling, kjoretoy, varsling
 from . import sok as sokmod
 from .sok import parse_kategorier, parse_sok
 
@@ -138,10 +138,15 @@ def _hent_jobb(slug: str, detaljer: bool = False) -> None:
             if not v:
                 _logg_til(slug)("FEIL: vakt ikke funnet")
                 return
+            fra_id = varsling.siste_hendelse_id(con, slug)
             res = innsamling.hent_vakt(con, v, _logg_til(slug))
             if detaljer:
                 innsamling.berik_detaljer(con, v, logg=_logg_til(slug))
-            _logg_til(slug)(res["status"])
+            try:
+                vs = varsling.etter_henting(con, v, fra_id)
+            except Exception as e:  # noqa: BLE001
+                vs = f"varsling feilet ({e})"
+            _logg_til(slug)(res["status"] + (f" | {vs}" if vs else ""))
         except Exception as e:  # noqa: BLE001 – feilen skal vises i UI-et, ikke drepe tråden
             _logg_til(slug)(f"FEIL: {e}")
             try:
@@ -393,19 +398,20 @@ def hent(slug: str, detaljer: str | None = Form(None), con: sqlite3.Connection =
 def _skjema_kontekst(v: dict | None) -> dict:
     """Feltene rediger.html viser. `skjema` er flat, så ny/rediger/kopi deler mal."""
     if not v:
-        return {"v": None, "kopi": None, "forslag": [], "brukere": [],
+        return {"v": None, "kopi": None, "forslag": [], "brukere": [], "varsel_typer": varsling.TYPER,
                 "skjema": {"navn": "", "slug": "", "eier": None, "sok": [], "kategorier": {},
                            "egen_bil": "", "egen_km": "", "regnr": "", "kjoretoy": None,
-                           "hentetime": 7, "aktiv": True, "formaal": "", "kriterier": {}}}
+                           "hentetime": 7, "aktiv": True, "formaal": "", "kriterier": {},
+                           "varsling": {"aktiv": False, "typer": []}}}
     sok = [{"tag": s.get("tag") or "", "url": s["url"], "kilde": s.get("kilde") or "finn",
             "auto": (s.get("kilde") or "finn") == sokmod.kilde_fra_url(s["url"])} for s in v["sok"]]
-    return {"v": v, "kopi": None, "forslag": [], "brukere": [],
+    return {"v": v, "kopi": None, "forslag": [], "brukere": [], "varsel_typer": varsling.TYPER,
             "skjema": {"navn": v["navn"], "slug": v["slug"], "eier": v.get("eier"), "sok": sok,
                        "kategorier": v.get("kategorier") or {}, "egen_bil": v.get("egen_bil") or "",
                        "egen_km": v.get("egen_km") or "", "regnr": v.get("regnr") or "",
                        "kjoretoy": v.get("kjoretoy"), "hentetime": v.get("hentetime") or 7,
                        "aktiv": bool(v.get("aktiv")), "formaal": v.get("formaal") or "",
-                       "kriterier": v.get("kriterier") or {}}}
+                       "kriterier": v.get("kriterier") or {}, "varsling": varsling.varsling_for(v)}}
 
 
 def _forslag(con, v: dict) -> list[tuple[str, int]]:
@@ -452,6 +458,7 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
           kat_navn: list[str] = Form([]), kat_nokkel: list[str] = Form([]), regnr: str = Form(""),
           formaal: str = Form(""), krit_maks_pris: str = Form(""), krit_maks_km: str = Form(""),
           krit_aar_fra: str = Form(""), krit_aar_til: str = Form(""), krit_kat: list[str] = Form([]),
+          varsle: str | None = Form(None), varsel_typer: list[str] = Form([]),
           con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     """Skjemaet sender søk og kategorier som rader (sok_*/kat_*). De gamle tekstfeltene
     `sok`/`kategorier` godtas fortsatt, så eldre klienter og tester virker."""
@@ -489,6 +496,7 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
     db.lagre_vakt(con, {
         "slug": ren, "navn": navn.strip() or ren, "sok": nye_sok, "kategorier": nye_kat,
         "regnr": regnr or None, "kjoretoy": kj, "formaal": formaal, "kriterier": kriterier,
+        "varsling": {"aktiv": bool(varsle), "typer": [t for t in varsel_typer if t in varsling.TYPER]},
         "egen_bil": egen_bil or None, "egen_km": int(egen_km) if egen_km.strip().isdigit() else None,
         "hentetime": hentetime, "aktiv": 1 if aktiv else 0,
         "opprettet": eksisterende.get("opprettet") if eksisterende else None,
@@ -636,7 +644,39 @@ def auth_logginn_fullfor(request: Request, data: dict = Body(...), con: sqlite3.
 def konto(request: Request, melding: str | None = None, con: sqlite3.Connection = Depends(kon),
           b: dict = Depends(bruker)):
     return templates.TemplateResponse(request, "konto.html",
-                                      {"passkeys": auth.passkeys(con, b["id"]), "melding": melding})
+                                      {"passkeys": auth.passkeys(con, b["id"]), "melding": melding,
+                                       "konto": auth.bruker(con, b["id"]),
+                                       "epost_oppsatt": bool(varsling.smtp_oppsett()),
+                                       "pushover_oppsatt": bool(varsling.pushover_token())})
+
+
+@app.post("/konto/varsling")
+def konto_varsling(epost: str = Form(""), pushover: str = Form(""), varsel_epost: str | None = Form(None),
+                   con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+    con.execute("UPDATE brukere SET epost=?, pushover=?, varsel_epost=? WHERE id=?",
+                (epost.strip() or None, pushover.strip() or None, 1 if varsel_epost else 0, b["id"]))
+    con.commit()
+    return RedirectResponse("/konto?melding=Varsling+lagret", status_code=303)
+
+
+@app.post("/konto/varsling/test")
+def konto_varsling_test(kanal: str = Form(...), con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+    u = auth.bruker(con, b["id"])
+    try:
+        if kanal == "epost":
+            if not u.get("epost"):
+                raise RuntimeError("ingen e-postadresse på kontoen")
+            send_test = varsling.send_epost(u["epost"], "FINN-marked: testvarsel",
+                                            "Dette er et testvarsel fra FINN-marked. Varsling virker.")
+        else:
+            if not u.get("pushover"):
+                raise RuntimeError("ingen Pushover-nøkkel på kontoen")
+            send_test = varsling.send_pushover(u["pushover"], "FINN-marked", "Testvarsel — varsling virker.", varsling.base_url() or None)
+        del send_test
+        melding = f"Testvarsel sendt via {'e-post' if kanal == 'epost' else 'Pushover'}"
+    except Exception as e:  # noqa: BLE001
+        melding = f"Test feilet: {e}"
+    return RedirectResponse(f"/konto?melding={urllib.parse.quote(melding)}", status_code=303)
 
 
 @app.post("/konto/passkey/{pid}/navn")

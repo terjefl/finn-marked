@@ -184,6 +184,35 @@ def hoved() -> int:
         sjekk("egen bil: ikke på nytt neste dag",
               con.execute("SELECT COUNT(*) c FROM hendelser WHERE slug='egen' AND type='egen'").fetchone()["c"], 1)
 
+        # 10) Varsling: plukk hendelser etter kriterier og send via stubbede kanaler
+        from app import varsling
+        sendt: list = []
+        varsling.send_epost = lambda til, emne, tekst, html=None: sendt.append(("epost", til, emne))
+        varsling.send_pushover = lambda nokkel, tittel, tekst, lenke=None: sendt.append(("pushover", nokkel, tittel))
+        con.execute("INSERT INTO brukere (handle, navn, epost, rolle, aktiv, opprettet, pushover, varsel_epost) "
+                    "VALUES ('h','Terje','t@x.no','admin',1,?, 'u123', 1)", (db.naa(),))
+        bid = con.execute("SELECT id FROM brukere WHERE navn='Terje'").fetchone()["id"]
+        v_k = dict(v, slug="kjop", eier=bid, formaal="kjoper", kriterier={"maks_pris": 250000},
+                   varsling={"aktiv": True, "typer": ["kandidat", "pris"]})
+        db.lagre_vakt(con, v_k)
+        _FEED["annonser"] = [dict(annonse(str(300 + i), pris=200000 + i * 30000), km=30000 + i * 15000) for i in range(6)]
+        _FEED["treff"] = 6
+        fra = varsling.siste_hendelse_id(con, "kjop")
+        innsamling.hent_vakt(con, v_k)
+        plukk = varsling.plukk_hendelser(con, db.vakt(con, "kjop"), fra)
+        sjekk("varsling: bare kandidater under maks pris", sorted(h["d"]["kilde_id"] for h in plukk), ["300", "301"])
+        vs = varsling.etter_henting(con, db.vakt(con, "kjop"), fra)
+        sjekk("varsling: sendt på begge kanaler", [k for k, *_ in sendt], ["epost", "pushover"])
+        sjekk("varsling: emne", sendt[0][2], "Test: 2 nye hendelser")
+        sjekk("varsling: status", vs, "varslet 2 hendelser via e-post, pushover")
+        sjekk("varsling: sist_varslet satt", bool(db.vakt(con, "kjop")["sist_varslet"]), True)
+        sendt.clear()
+        fra = varsling.siste_hendelse_id(con, "kjop")
+        innsamling.hent_vakt(con, v_k)
+        sjekk("varsling: ingenting nytt → ingen melding", (varsling.etter_henting(con, db.vakt(con, "kjop"), fra), sendt), (None, []))
+        sjekk("varsling: av → ingen plukk", varsling.plukk_hendelser(con, dict(v_k, varsling={"aktiv": False}), 0), [])
+        sjekk("varsling: standardtyper etter formål", varsling.varsling_for({"formaal": "eier"})["typer"], ["egen", "solgt"])
+
         con.close()
     finally:
         shutil.rmtree(mappe, ignore_errors=True)

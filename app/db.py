@@ -76,6 +76,13 @@ MIGRERINGER: list[tuple[int, list[str]]] = [
         "ALTER TABLE vakter ADD COLUMN formaal TEXT",
         "ALTER TABLE vakter ADD COLUMN kriterier TEXT",   # JSON: {maks_pris, maks_km, aar_fra, aar_til, kategorier}
     ]),
+    # Varsling: kanaler per bruker (e-post, Pushover), valg per vakt, og når det sist ble varslet.
+    (7, [
+        "ALTER TABLE brukere ADD COLUMN pushover TEXT",
+        "ALTER TABLE brukere ADD COLUMN varsel_epost INTEGER NOT NULL DEFAULT 1",
+        "ALTER TABLE vakter ADD COLUMN varsling TEXT",     # JSON: {aktiv, typer: [...]}
+        "ALTER TABLE vakter ADD COLUMN sist_varslet TEXT",
+    ]),
 ]
 
 SKJEMA = """
@@ -248,6 +255,7 @@ def vakter(con: sqlite3.Connection, kun_aktive: bool = False, eier: int | None =
         v["kategorier"] = json.loads(v.get("kategorier") or "{}")
         v["kjoretoy"] = json.loads(v.get("kjoretoy") or "null")
         v["kriterier"] = json.loads(v.get("kriterier") or "{}")
+        v["varsling"] = json.loads(v.get("varsling") or "{}")
         ut.append(v)
     return ut
 
@@ -261,23 +269,25 @@ def vakt(con: sqlite3.Connection, slug: str) -> dict | None:
     v["kategorier"] = json.loads(v["kategorier"] or "{}")
     v["kjoretoy"] = json.loads(v.get("kjoretoy") or "null")
     v["kriterier"] = json.loads(v.get("kriterier") or "{}")
+    v["varsling"] = json.loads(v.get("varsling") or "{}")
     return v
 
 
 def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
     con.execute(
         """INSERT INTO vakter (slug, navn, sok, kategorier, egen_bil, egen_km, hentetime, aktiv,
-                               opprettet, sist_hentet, sist_status, eier, regnr, kjoretoy, formaal, kriterier)
+                               opprettet, sist_hentet, sist_status, eier, regnr, kjoretoy, formaal, kriterier,
+                               varsling)
            VALUES (:slug, :navn, :sok, :kategorier, :egen_bil, :egen_km, :hentetime, :aktiv,
                    COALESCE(:opprettet, :naa), :sist_hentet, :sist_status, :eier, :regnr, :kjoretoy,
-                   :formaal, :kriterier)
+                   :formaal, :kriterier, :varsling)
            ON CONFLICT(slug) DO UPDATE SET
              navn=excluded.navn, sok=excluded.sok, kategorier=excluded.kategorier,
              egen_bil=excluded.egen_bil, egen_km=excluded.egen_km,
              hentetime=excluded.hentetime, aktiv=excluded.aktiv,
              eier=COALESCE(excluded.eier, vakter.eier),
              regnr=excluded.regnr, kjoretoy=excluded.kjoretoy,
-             formaal=excluded.formaal, kriterier=excluded.kriterier""",
+             formaal=excluded.formaal, kriterier=excluded.kriterier, varsling=excluded.varsling""",
         {
             "slug": v["slug"], "navn": v["navn"],
             "sok": json.dumps(v.get("sok") or [], ensure_ascii=False),
@@ -290,6 +300,7 @@ def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
             "kjoretoy": json.dumps(v["kjoretoy"], ensure_ascii=False) if v.get("kjoretoy") else None,
             "formaal": v.get("formaal") or ("eier" if (v.get("regnr") or v.get("egen_km")) else "kjoper"),
             "kriterier": json.dumps(v["kriterier"], ensure_ascii=False) if v.get("kriterier") else None,
+            "varsling": json.dumps(v["varsling"], ensure_ascii=False) if v.get("varsling") else None,
         },
     )
 
