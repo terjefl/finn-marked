@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block tittel %}{{ v.navn }} — FINN-marked{% endblock %}
+{% block innhold %}
+<div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap">
+  <h1>{{ v.navn }}</h1>
+  <div style="display:flex; gap:8px">
+    <form class="inline" method="post" action="/vakt/{{ v.slug }}/hent">
+      <button{% if kjorer_aktiv %} disabled{% endif %}>{% if kjorer_aktiv %}Henter …{% else %}Oppdater nå{% endif %}</button></form>
+    <a href="/vakt/{{ v.slug }}/rediger"><button class="lett">Rediger søk</button></a>
+    <a href="/api/vakt/{{ v.slug }}" target="_blank"><button class="lett">JSON</button></a>
+  </div>
+</div>
+<div class="dempet" style="margin-bottom:12px">
+  {{ v.sok | length }} søk:
+  {% for s in v.sok %}<span class="pill">{{ s.get('kilde', 'finn') }}: {{ s.tag }}</span>{% endfor %}
+  {% if v.sist_hentet %}<br>Sist hentet {{ v.sist_hentet }}{% if kjorer %}: <em>{{ kjorer }}</em>{% endif %}{% endif %}
+</div>
+
+<div class="rutenett">
+  <div class="kort"><div class="dempet">Til salgs</div><div class="nokkel">{{ filtrert_oppsummering.antall }}</div>
+       <div class="dempet">{{ filtrert_oppsummering.antall_pris }} med pris</div></div>
+  <div class="kort"><div class="dempet">Median</div>
+       <div class="nokkel">{{ "{:,.0f}".format(filtrert_oppsummering.median).replace(",", " ") if filtrert_oppsummering.median else "–" }}</div>
+       {% if filtrert_oppsummering.p25 %}<div class="dempet">25/75: {{ "{:,.0f}".format(filtrert_oppsummering.p25).replace(",", " ") }} /
+       {{ "{:,.0f}".format(filtrert_oppsummering.p75).replace(",", " ") }}</div>{% endif %}</div>
+  <div class="kort"><div class="dempet">Km (median)</div>
+       <div class="nokkel">{% if filtrert_oppsummering.km_median %}{{ "{:,.0f}".format(filtrert_oppsummering.km_median).replace(",", " ") }}{% else %}–{% endif %}</div>
+       <div class="dempet">spenn {{ filtrert_oppsummering.km_min }}–{{ filtrert_oppsummering.km_max }} km</div></div>
+  <div class="kort"><div class="dempet">Solgt (registrert)</div><div class="nokkel">{{ solgte | length }}</div>
+       <div class="dempet">FINN markerer solgte annonser i søket</div></div>
+</div>
+
+{% if kurve %}
+<div class="kort">
+  <h2 style="margin-top:0">Pris mot kilometerstand</h2>
+  <div class="slider">
+    <label for="km" style="margin:0">Din kilometerstand:</label>
+    <input type="range" id="km" min="{{ kurve.serie | map(attribute=0) | min }}" max="{{ kurve.serie | map(attribute=0) | max }}"
+           step="1000" value="{{ kurve.egen_km or 60000 }}">
+    <span class="dempet" id="kmvis">{{ kurve.egen_km or 60000 }} km</span>
+  </div>
+  <div class="rutenett">
+    <div><div class="dempet">Estimert utropspris (regresjon)</div>
+         <div class="estimat" id="est">–</div>
+         <div class="dempet">{{ kurve.n }} annonser · R² {{ "%.2f" | format(kurve.r2) }} · ±{{ "{:,.0f}".format(kurve.sd).replace(",", " ") }} (1 std.avvik)</div></div>
+    <div><div class="dempet">Sammenlignbare ±10 000 km</div>
+         <div class="estimat" id="nabo">–</div>
+         <div class="dempet" id="naboant">–</div></div>
+    <div><div class="dempet">Verdifall per 1000 km</div>
+         <div class="estimat">{{ "{:,.0f}".format(kurve.per_1000km).replace(",", " ") }} kr</div>
+         <div class="dempet">utropspris-nivå, ikke oppnådd pris</div></div>
+  </div>
+  {{ svg | safe }}
+</div>
+<script>
+(() => {
+  const serie = {{ kurve.serie | tojson }};
+  const a = {{ kurve.a }}, b = {{ kurve.b }};
+  const felt = document.getElementById('km');
+  const vis = document.getElementById('kmvis');
+  const est = document.getElementById('est');
+  const nabo = document.getElementById('nabo');
+  const naboAnt = document.getElementById('naboant');
+  const kr = n => Math.round(n).toLocaleString('nb-NO').replace(/,/g, ' ') + ' kr';
+  const oppdater = () => {
+    const km = +felt.value;
+    vis.textContent = km.toLocaleString('nb-NO') + ' km';
+    est.textContent = kr(a + b * km);
+    const n = serie.filter(p => Math.abs(p[0] - km) <= 10000).map(p => p[1]).sort((x, y) => x - y);
+    nabo.textContent = n.length ? kr(n[Math.floor(n.length / 2)]) : '–';
+    naboAnt.textContent = n.length ? n.length + ' annonser: ' + kr(n[0]) + ' – ' + kr(n[n.length - 1]) : 'ingen i nabolaget';
+  };
+  felt.addEventListener('input', oppdater);
+  oppdater();
+})();
+</script>
+{% endif %}
+
+<h2>Pris per kilometerintervall</h2>
+<table>
+  <thead><tr><th>Km</th><th>Antall</th><th>Median utropspris</th></tr></thead>
+  <tbody>
+  {% for b in botter %}
+    <tr><td>{{ b.fra }}–{{ b.til }} 000</td><td>{{ b.antall }}</td>
+        <td>{{ "{:,.0f}".format(b.median).replace(",", " ") }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<h2>Endringer</h2>
+{% if hendelser %}
+<table>
+  <thead><tr><th>Tid</th><th>Type</th><th>Hva</th></tr></thead>
+  <tbody>
+  {% for h in hendelser %}
+    <tr><td class="dempet">{{ h.tid }}</td>
+        <td><span class="pill {% if h.type == 'solgt' %}solgt{% endif %}">{{ h.type }}</span></td>
+        <td>{% if h.lenke %}<a href="{{ h.lenke }}" target="_blank">{{ h.tekst }}</a>{% else %}{{ h.tekst }}{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}<p class="dempet">Ingen registrerte endringer ennå — de dukker opp når neste henting finner noe nytt.</p>{% endif %}
+
+<h2>Til salgs ({{ annonser | length }})</h2>
+<div class="filtre">
+  <a href="/vakt/{{ v.slug }}" class="{{ 'aktiv' if kategori == 'alle' }}">alle</a>
+  {% for k in kategorier %}
+    <a href="/vakt/{{ v.slug }}?kategori={{ k | urlencode }}" class="{{ 'aktiv' if kategori == k }}">{{ k }}</a>
+  {% endfor %}
+</div>
+<form method="get" action="/vakt/{{ v.slug }}" style="margin-bottom:12px; display:flex; gap:8px">
+  <input type="hidden" name="kategori" value="{{ kategori if kategori != 'alle' }}">
+  <input type="text" name="q" value="{{ q }}" placeholder="fritekst i tittel (f.eks. hengerfeste, laser, soltak)">
+  <button class="lett">Filtrer</button>
+</form>
+<table>
+  <thead><tr><th>Pris</th><th>Km</th><th>År</th><th>Annonse</th><th>Sted</th><th>Selger</th><th>Kategori</th><th>Kilde</th></tr></thead>
+  <tbody>
+  {% for a in annonser %}
+    <tr>
+      <td>{{ "{:,.0f}".format(a.pris).replace(",", " ") if a.pris else "–" }}{% if a.pris_type == 'bud' %} <span class="dempet">bud</span>{% endif %}</td>
+      <td>{{ "{:,.0f}".format(a.km).replace(",", " ") if a.km else "–" }}</td>
+      <td>{{ a.aar or "–" }}</td>
+      <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or "" }}</a></td>
+      <td>{{ a.sted or "–" }}</td>
+      <td>{{ a.selger_type or "–" }}{% if a.selger %} <span class="dempet">{{ a.selger }}</span>{% endif %}</td>
+      <td>{% for k in (a.tagger or "").split(",") if k %}<span class="pill {% if 'Fully' in k %}fully{% endif %}">{{ k }}</span>{% endfor %}</td>
+      <td class="dempet">{{ a.kilde }}{% if a.forst_sett %} · sett {{ a.forst_sett }}{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+{% if solgte %}
+<h2>Solgt siden overvåkingen startet ({{ solgte | length }})</h2>
+<table>
+  <thead><tr><th>Km</th><th>Annonse</th><th>Sist sett til</th><th>Solgt</th><th>Lå ute</th></tr></thead>
+  <tbody>
+  {% for a in solgte %}
+    <tr><td>{{ "{:,.0f}".format(a.km).replace(",", " ") if a.km else "–" }}</td>
+        <td>{{ a.tittel }} {{ a.undertittel or "" }}</td>
+        <td>{{ "{:,.0f}".format(a.pris).replace(",", " ") if a.pris else "–" }}</td>
+        <td>{{ a.solgt_dato or "–" }}</td>
+        <td class="dempet">{{ a.forst_sett }} → {{ a.solgt_dato or "?" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+<p class="dempet">Liggetiden måles fra første observasjon i basen, ikke fra annonsen ble lagt ut.</p>
+{% endif %}
+
+<h2>Hentingshistorikk</h2>
+<table>
+  <thead><tr><th>Dato</th><th>Treff hos kildene</th><th>Til salgs m/pris</th><th>Median</th><th>Min</th><th>Max</th></tr></thead>
+  <tbody>
+  {% for k in kjoringer | reverse %}
+    <tr><td class="dempet">{{ k.dato }}</td><td>{{ k.treff }}</td><td>{{ k.aktive }}</td>
+        <td>{{ "{:,.0f}".format(k.median).replace(",", " ") if k.median else "–" }}</td>
+        <td>{{ "{:,.0f}".format(k['min']).replace(",", " ") if k['min'] else "–" }}</td>
+        <td>{{ "{:,.0f}".format(k['max']).replace(",", " ") if k['max'] else "–" }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

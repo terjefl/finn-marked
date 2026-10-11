@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block tittel %}FINN-marked{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <a class="logo" href="/">FINN-marked</a>
+  <nav>
+    <a href="/">Oversikt</a>
+    <a href="/vakt/ny">Ny vakt</a>
+  </nav>
+</header>
+<main>
+{% block innhold %}{% endblock %}
+</main>
+<footer>
+  Data hentes fra kildene (FINN, Auksjonen m.fl.) — utropspriser, ikke oppnådde salgspriser.
+  Kildekoden: <code>terjefl/finn-marked</code>.
+</footer>
+</body>
+</html>

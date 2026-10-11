@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block tittel %}{{ 'Rediger' if v else 'Ny' }} vakt — FINN-marked{% endblock %}
+{% block innhold %}
+<h1>{{ 'Rediger vakt' if v else 'Ny vakt' }}</h1>
+<p class="dempet">En vakt er ett marked. Søkene kan komme fra flere kilder samtidig — legg inn så mange du vil,
+én per linje. FINN-søket lager du ved å gjøre søket på finn.no og kopiere URL-en fra adressefeltet.</p>
+
+<form method="post" action="/vakt/lagre">
+  <div class="kort">
+    <label for="navn">Navn på markedet</label>
+    <input type="text" id="navn" name="navn" required value="{{ v.navn if v else '' }}"
+           placeholder="BMW i4 2022 (M50 xDrive)">
+
+    <label for="slug">Kortnavn (brukes i URL og API — bokstaver, tall og bindestrek)</label>
+    <input type="text" id="slug" name="slug" required value="{{ v.slug if v else '' }}" placeholder="bmw-i4-2022">
+
+    <label for="sok">Søk — én linje per søk: <code>tag | url</code> (tag kan utelates)</label>
+    <textarea id="sok" name="sok" required placeholder="alle | https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&registration_class=1&wheel_drive=2
+fully | https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&registration_class=1&wheel_drive=2&q=fully">{{ sok_tekst }}</textarea>
+    <p class="dempet">
+      «tag» merkes på annonsene og brukes til å kategorisere dem (en annonse som dukker opp i
+      flere søk får begge taggene). Kilder som støttes nå: <code>finn</code> (standard).
+      Legg til <code>auksjonen |</code> foran når den kilden er tatt i bruk.
+    </p>
+
+    <label for="kategorier">Kategorier — én per linje som <code>nokkel = visningsnavn</code></label>
+    <textarea id="kategorier" name="kategorier" style="min-height:90px" placeholder="fully = Fully Charged
+super = Supercharged
+m50 = M50">{{ kat_tekst }}</textarea>
+    <p class="dempet">Nøkkelen matches mot fritekst i tittel/undertittel («fully» → «Fully Charged») og mot søkets tag.</p>
+
+    <label for="egen_bil">Egen bil (valgfritt — vises i verdiestimatet)</label>
+    <input type="text" id="egen_bil" name="egen_bil" value="{{ v.egen_bil or '' if v else '' }}"
+           placeholder="BMW i4 M50 xDrive Fully Charged 2022">
+
+    <label for="egen_km">Egen kilometerstand</label>
+    <input type="number" id="egen_km" name="egen_km" value="{{ v.egen_km or '' if v else '' }}" placeholder="56028">
+
+    <label for="hentetime">Hent automatisk klokka (lokal tid, én gang i døgnet)</label>
+    <input type="number" id="hentetime" name="hentetime" min="0" max="23" value="{{ v.hentetime if v else 7 }}">
+
+    <label><input type="checkbox" name="aktiv" value="1" style="width:auto"
+        {{ 'checked' if (not v) or v.aktiv }}> Aktiv (hentes automatisk)</label>
+  </div>
+  <div style="display:flex; gap:10px">
+    <button type="submit">Lagre</button>
+    {% if v %}<a href="/vakt/{{ v.slug }}"><button class="lett" type="button">Avbryt</button></a>{% endif %}
+  </div>
+</form>
+
+{% if v %}
+<form method="post" action="/vakt/{{ v.slug }}/slett" style="margin-top:26px"
+      onsubmit="return confirm('Slette vakten? Kryss av under for å slette historikken også.')">
+  <div class="kort">
+    <h3 style="margin-top:0">Slett vakten</h3>
+    <label><input type="checkbox" name="data" value="1" style="width:auto">
+      Slett også alle annonser, prisendringer og historikk for denne vakten</label>
+    <p class="dempet">Uten kryss beholdes historikken i basen, men vakten fjernes fra oversikten.</p>
+  </div>
+  <button class="fare" type="submit">Slett vakt</button>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block tittel %}Oversikt — FINN-marked{% endblock %}
+{% block innhold %}
+<h1>Markedsovervåking for biler</h1>
+<p class="dempet">
+  Hver vakt er ett marked: ett eller flere søk hos én eller flere kilder, samlet i samme base.
+  Henting skjer automatisk én gang i døgnet per vakt, og kan kjøres manuelt når som helst.
+</p>
+
+{% for r in oversikt %}
+<div class="kort">
+  <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap">
+    <div>
+      <a class="navn" style="font-size:17px" href="/vakt/{{ r.v.slug }}">{{ r.v.navn }}</a>
+      {% if not r.v.aktiv %}<span class="pill">av</span>{% endif %}
+      {% if r.v.egen_bil %}<div class="dempet">{{ r.v.egen_bil }}{% if r.v.egen_km %} · {{ "{:,}".format(r.v.egen_km).replace(",", " ") }} km{% endif %}</div>{% endif %}
+    </div>
+    <div class="dempet">
+      {{ r.v.sok | length }} søk ·
+      {% for s in r.v.sok %}<span class="pill">{{ s.get('kilde', 'finn') }}: {{ s.tag }}</span>{% endfor %}
+    </div>
+  </div>
+  <div class="rutenett" style="margin-top:12px">
+    <div><div class="dempet">Til salgs</div><div class="nokkel">{{ r.oppsummering.antall }}</div>
+         <div class="dempet">{{ r.oppsummering.antall_pris }} med pris</div></div>
+    <div><div class="dempet">Median utropspris</div>
+         <div class="nokkel">{{ "{:,.0f}".format(r.oppsummering.median).replace(",", " ") if r.oppsummering.median else "–" }}</div></div>
+    <div><div class="dempet">Nye siste 7 dager</div><div class="nokkel">{{ r.nye_uke }}</div></div>
+    <div><div class="dempet">Solgt (registrert)</div><div class="nokkel">{{ r.solgte }}</div></div>
+  </div>
+  <div class="dempet" style="margin-top:10px">
+    {% if r.v.sist_hentet %}Sist hentet {{ r.v.sist_hentet }}.{% else %}Aldri hentet ennå.{% endif %}
+    {% if r.status %} <em>{{ r.status }}</em>{% endif %}
+  </div>
+  <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap">
+    <a href="/vakt/{{ r.v.slug }}"><button class="lett">Åpne</button></a>
+    <form class="inline" method="post" action="/vakt/{{ r.v.slug }}/hent"><button>Oppdater nå</button></form>
+    <form class="inline" method="post" action="/vakt/{{ r.v.slug }}/hent">
+      <input type="hidden" name="detaljer" value="1"><button class="lett">Oppdater + detaljer</button></form>
+  </div>
+</div>
+{% else %}
+<div class="kort">
+  <p>Ingen vakter ennå. <a href="/vakt/ny">Opprett den første</a> — f.eks. med søke-URL-en fra FINN.</p>
+</div>
+{% endfor %}
+{% endblock %}

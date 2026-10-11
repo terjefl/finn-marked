@@ -1,0 +1,19 @@
+# Kjører tjenesten lokalt/ på en vert uten Portainer. I Portainer brukes
+# DOCKERSRV1/finn-marked/compose.yml i Docker-repoet (samme image, egne volumer).
+services:
+  finn-marked:
+    image: ghcr.io/terjefl/finn-marked:latest
+    container_name: finn-marked
+    restart: unless-stopped
+    environment:
+      - TZ=Europe/Oslo
+      - FINN_DATA=/data
+    ports:
+      - "8099:8000"
+    volumes:
+      - ./data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
