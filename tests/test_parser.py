@@ -113,6 +113,39 @@ def main() -> int:
     sjekk("kategori: ingen kategorier gir ingen tagger", kategoriser(a, {}, []), "")
     sjekk("kategori: tag fra søket", kategoriser({"tittel": "BMW i4"}, kat, ["m50"]), "M50")
 
+    # JSON-API-et (primærkilden nå): ett dokument til salgs, ett solgt
+    from app.kilder.finn import api_url, fra_api_doc, les_api_side
+    doc = {"id": "477918904", "type": "motor", "heading": "BMW i4", "model_specification": "M50 Supercharged",
+           "year": 2022, "mileage": 70725, "fuel": "El", "driving_range": 419, "location": "Elverum",
+           "dealer_segment": "Privat", "organisation_name": None, "regno": "EE 64976",
+           "chassis_number": "wby31aw04pfn73190", "timestamp": 1791718755000, "flags": [], "labels": [],
+           "price": {"amount": 449000, "currency_code": "NOK"}, "registration_class": {"id": 1, "value": "Personbil"},
+           "transmission": "Automat", "warranty_duration": 12, "canonical_url": "https://www.finn.no/mobility/item/477918904"}
+    d = fra_api_doc(doc)
+    sjekk("api: kilde_id/url", (d["kilde_id"], d["url"]), ("477918904", "https://www.finn.no/mobility/item/477918904"))
+    sjekk("api: tittel/undertittel", (d["tittel"], d["undertittel"]), ("BMW i4", "M50 Supercharged"))
+    sjekk("api: tall", (d["aar"], d["km"], d["pris"], d["rekkevidde"]), (2022, 70725, 449000, 419))
+    sjekk("api: pris_type/solgt", (d["pris_type"], d["solgt"], d["merke"]), ("utropspris", False, None))
+    sjekk("api: sted/selger", (d["sted"], d["selger_type"], d["selger"]), ("Elverum", "Privat", None))
+    sjekk("api: regnr/vin normalisert", (d["ekstra"]["regnr"], d["ekstra"]["vin"]), ("EE64976", "WBY31AW04PFN73190"))
+    sjekk("api: lagt_ut fra timestamp", d["ekstra"]["lagt_ut"], "2026-10-11")
+    solgt = dict(doc, id="1", flags=["sold", "right_to_exchange"], labels=[{"id": "sold"}], price={"amount": 449900})
+    e = fra_api_doc(solgt)
+    sjekk("api: solgt beholder prisen", (e["solgt"], e["pris"], e["pris_type"], e["merke"]), (True, 449900, "solgt", "Solgt"))
+    sjekk("api: uten pris", fra_api_doc(dict(doc, price=None))["pris_type"], "ukjent")
+    sjekk("api: ikke-motor hoppes over", fra_api_doc(dict(doc, type="realestate")), None)
+    sjekk("api_url beholder filtre, bytter page",
+          api_url("https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&page=3", 2),
+          "https://www.finn.no/mobility/search/api/search/SEARCH_ID_CAR_USED?variant=1.749.8308&year_from=2022&page=2")
+    import json as _json
+    ann, treff, sider = les_api_side(_json.dumps({"docs": [doc, solgt], "metadata": {"result_size": {"match_count": 61}, "paging": {"last": 2}}}))
+    sjekk("les_api_side", (len(ann), treff, sider), (2, 61, 2))
+    try:
+        les_api_side('{"feil": 1}')
+        sjekk("les_api_side avviser svar uten docs", False, True)
+    except RuntimeError:
+        sjekk("les_api_side avviser svar uten docs", True, True)
+
     print()
     if feil:
         print(f"{len(feil)} test(er) feilet: {', '.join(feil)}")

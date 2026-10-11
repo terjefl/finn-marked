@@ -8,9 +8,12 @@ paginering virker, «Solgt»-badge i kortet, pris skjules på solgte annonser.
 from __future__ import annotations
 
 import html as htmllib
+import json
+import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date
 from functools import lru_cache
@@ -18,6 +21,9 @@ from functools import lru_cache
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/126.0 Safari/537.36")
 SLEEP = 1.0
+#: FINNs JSON-API bak søkesiden: samme parametre som søkesiden, strukturerte annonser,
+#: og filteret «variant» = hele merke-/modelltreet.
+API_SOK = "https://www.finn.no/mobility/search/api/search/SEARCH_ID_CAR_USED"
 
 
 def hent(url: str, timeout: int = 40, forsok: int = 3) -> str:
@@ -175,7 +181,13 @@ def les_side(html: str) -> tuple[dict[str, dict], int, int]:
 def forhandsvis(url: str, antall: int = 3) -> dict:
     """Bare første side — til «Ny vakt»-skjemaet, så brukeren ser at URL-en virker
     før noe lagres. Returnerer treff, sider, noen eksempler og alle titlene (til navneforslag)."""
-    ann, treff, sider = les_side(hent(url))
+    if kilde_modus() == "html":
+        ann, treff, sider = les_side(hent(url))
+    else:
+        try:
+            ann, treff, sider = les_api_side(hent(api_url(url, 1)))
+        except (RuntimeError, ValueError):
+            ann, treff, sider = les_side(hent(url))
     kort = list(ann.values())
     return {"treff": treff, "sider": sider, "kort_pa_siden": len(kort),
             "eksempler": [{k: a.get(k) for k in ("tittel", "undertittel", "pris", "km", "aar", "url")}
@@ -238,13 +250,122 @@ def i_dag() -> str:
 
 # ------------------------------------------------------------------ adapter
 
+# ------------------------------------------------------------------ JSON-API (primær kilde)
+
+def api_url(sokeurl: str, side: int = 1) -> str:
+    """Søkesidens URL → API-URL med samme parametre. Søkesiden kaller selv dette
+    API-et, så filtrene (variant, year_from, q, fuel …) er de samme. `page` byttes."""
+    deler = urllib.parse.urlsplit(sokeurl)
+    q = [(k, v) for k, v in urllib.parse.parse_qsl(deler.query, keep_blank_values=False) if k != "page"]
+    if side > 1:
+        q.append(("page", str(side)))
+    return API_SOK + ("?" + urllib.parse.urlencode(q) if q else "")
+
+
+def _dato_av_ms(ms) -> str | None:
+    try:
+        return date.fromtimestamp(int(ms) / 1000).isoformat() if ms else None
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def fra_api_doc(d: dict) -> dict | None:
+    """Ett JSON-dokument fra søke-API-et → felles annonseformat (se kilder/__init__)."""
+    finn_id = str(d.get("id") or d.get("ad_id") or "").strip()
+    if not finn_id or d.get("type") not in (None, "motor"):
+        return None
+    flagg = [str(f) for f in (d.get("flags") or [])]
+    merker = [str(x.get("id") if isinstance(x, dict) else x) for x in (d.get("labels") or [])]
+    solgt = "sold" in flagg or "sold" in merker
+    pris = (d.get("price") or {}).get("amount")
+    pris = int(pris) if isinstance(pris, int | float) and pris > 0 else None
+    km = d.get("mileage")
+    km = int(km) if isinstance(km, int | float) and km >= 0 else None
+    reg = d.get("registration_class")
+    reg = reg.get("value") if isinstance(reg, dict) else reg
+    return {
+        "kilde": "finn",
+        "kilde_id": finn_id,
+        "url": d.get("canonical_url") or f"https://www.finn.no/mobility/item/{finn_id}",
+        "tittel": (d.get("heading") or "").strip() or None,
+        "undertittel": (d.get("model_specification") or "").strip() or None,
+        "aar": int(d["year"]) if isinstance(d.get("year"), int | float) else None,
+        "km": km,
+        "drivstoff": d.get("fuel") or None,
+        "rekkevidde": int(d["driving_range"]) if isinstance(d.get("driving_range"), int | float) else None,
+        "pris": pris,
+        "pris_type": "solgt" if solgt else ("utropspris" if pris else "ukjent"),
+        "sted": d.get("location") or None,
+        "selger": (d.get("organisation_name") or "")[:80] or None,
+        "selger_type": d.get("dealer_segment") or None,
+        "merke": "Solgt" if solgt else None,
+        "solgt": solgt,
+        "ekstra": {
+            "regnr": (d.get("regno") or "").replace(" ", "").upper() or None,
+            "vin": (d.get("chassis_number") or "").strip().upper() or None,
+            "lagt_ut": _dato_av_ms(d.get("timestamp")),
+            "merke": d.get("make"), "modell": d.get("model"),
+            "girkasse": d.get("transmission"), "garanti_mnd": d.get("warranty_duration"),
+            "salgsform": d.get("sales_form"), "klasse": reg, "flagg": flagg,
+        },
+    }
+
+
+def les_api_side(tekst: str) -> tuple[dict[str, dict], int, int]:
+    """Parser ett API-svar: (annonser per id, treff, antall sider)."""
+    data = json.loads(tekst)
+    if not isinstance(data, dict) or "docs" not in data:
+        raise RuntimeError("uventet svar fra FINN-API-et (ingen docs)")
+    meta = data.get("metadata") or {}
+    treff = int(((meta.get("result_size") or {}).get("match_count")) or 0)
+    sider = int(((meta.get("paging") or {}).get("last")) or 1)
+    ann: dict[str, dict] = {}
+    for d in data.get("docs") or []:
+        a = fra_api_doc(d)
+        if a:
+            ann[a["kilde_id"]] = a
+    return ann, treff, sider
+
+
+def hent_sok_api(url: str, logg=lambda m: None) -> tuple[list[dict], int, int]:
+    """Som hent_sok, men mot JSON-API-et. Returnerer (annonser, treff, antall_sider)."""
+    ann, treff, sider = les_api_side(hent(api_url(url, 1)))
+    logg(f"side 1/{sider}: {len(ann)} annonser (API-et oppgir {treff} treff)")
+    for p in range(2, sider + 1):
+        time.sleep(SLEEP)
+        flere, _, _ = les_api_side(hent(api_url(url, p)))
+        nye = 0
+        for k, a in flere.items():
+            if k not in ann:
+                ann[k] = a
+                nye += 1
+        logg(f"side {p}/{sider}: +{nye} nye (totalt {len(ann)})")
+    return list(ann.values()), treff, sider
+
+
+def kilde_modus() -> str:
+    """«api» (standard) eller «html» (FINN_KILDE=html) — reserven hvis API-et endres."""
+    return (os.environ.get("FINN_KILDE") or "api").strip().lower()
+
+
+def hent_sok_valgt(url: str, logg=lambda m: None) -> tuple[list[dict], int, int]:
+    """API først; faller tilbake til HTML-henteren hvis API-et svarer uventet."""
+    if kilde_modus() == "html":
+        return hent_sok(url, logg)
+    try:
+        return hent_sok_api(url, logg)
+    except (RuntimeError, ValueError) as e:
+        logg(f"FINN-API-et feilet ({e}); prøver HTML-siden")
+        return hent_sok(url, logg)
+
+
 class FinnKilde:
     """FINN mobilitet. Søket er {"url": "<søke-URL>", "tag": "<kortnavn>"}."""
 
     navn = "finn"
 
     def hent(self, sok: dict, logg=lambda m: None) -> tuple[list[dict], int]:
-        annonser, treff, _sider = hent_sok(sok["url"], logg)
+        annonser, treff, _sider = hent_sok_valgt(sok["url"], logg)
         for a in annonser:
             a.setdefault("ekstra", {})
             a["ekstra"]["sok_tag"] = sok.get("tag")
@@ -260,7 +381,6 @@ registrer(FinnKilde())
 
 #: FINNs JSON-API bak søkesiden. Gir blant annet filteret «variant» = hele treet av
 #: merker (0.<kode>) og modeller (1.<merke>.<kode>) med visningsnavn.
-API_SOK = "https://www.finn.no/mobility/search/api/search/SEARCH_ID_CAR_USED"
 _merketre: dict = {"hentet": 0.0, "merker": []}
 MERKETRE_LEVETID = 24 * 3600
 

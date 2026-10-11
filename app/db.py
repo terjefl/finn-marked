@@ -53,6 +53,15 @@ MIGRERINGER: list[tuple[int, list[str]]] = [
         "ALTER TABLE vakter ADD COLUMN regnr TEXT",
         "ALTER TABLE vakter ADD COLUMN kjoretoy TEXT",
     ]),
+    # FINN-API-et gir reg.nr, understellsnummer og når annonsen ble lagt ut: egne kolonner,
+    # så samme bil kan gjenkjennes på tvers av annonser og liggetid måles fra FINN sin dato.
+    (4, [
+        "ALTER TABLE annonser ADD COLUMN regnr TEXT",
+        "ALTER TABLE annonser ADD COLUMN vin TEXT",
+        "ALTER TABLE annonser ADD COLUMN lagt_ut TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_annonser_vin ON annonser(slug, vin)",
+        "CREATE INDEX IF NOT EXISTS idx_annonser_regnr ON annonser(slug, regnr)",
+    ]),
 ]
 
 SKJEMA = """

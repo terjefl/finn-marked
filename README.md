@@ -17,7 +17,10 @@ og hvert søk navngir sin **kilde**. Nye plattformer legges til som en adapter i
 * **Registrerer salg.** FINN markerer solgte annonser i søket («Solgt», uten pris).
   Det flagget fanges, så du får reell salgstakt — ikke bare tilbudssiden.
 * **Lagrer historikk**: første/siste observasjon, prisendringer og liggetid per
-  annonse, samt én rad per henting med median/percentiler.
+  annonse (fra FINN sin utlagt-dato), samt én rad per henting med median/percentiler.
+* **Kjenner igjen samme bil** på understellsnummer/reg.nr: legges en bil ut på nytt
+  med ny annonse, logges det som «lagt ut på nytt» med forrige pris, ikke som ny.
+  Har markedet ditt reg.nr, varsles «Din bil ligger ute» når den dukker opp.
 * **Verdikurve** per marked: regresjon på utropspriser mot kilometerstand, med
   spredning. Sammenlignbare innen ±10 000 km vises ved siden av, fordi det tallet
   er lettere å forholde seg til enn en linje.
@@ -32,7 +35,7 @@ auksjoner holdes utenfor median, kurve og km-bøtter, og vises bare i annonselis
 
 | Kilde | Status | Merknad |
 |---|---|---|
-| `finn` | i bruk | FINN mobilitet (`/mobility/search/car`), SSR-HTML |
+| `finn` | i bruk | FINN mobilitet via JSON-API-et bak søkesiden (strukturerte felt, reg.nr, understellsnummer, utlagt-dato, pris også på solgte). HTML-henteren ligger som reserve: `FINN_KILDE=html` |
 | `auksjonen` | i bruk | Auksjonen.no (JSON-API). Objektene ligger også på FINN, men bud/minstepris hentes her |
 
 Kategorier er ikke hardkodet per merke: mønstrene utledes av vaktens egne

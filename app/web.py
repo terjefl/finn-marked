@@ -64,6 +64,7 @@ templates = Jinja2Templates(directory=str(BASE / "templates"), context_processor
 # nøyaktig det samme (og gir «–» for tomt), så den registreres som filter.
 templates.env.filters["kr"] = analyse.kr
 templates.env.filters["km"] = analyse.km_str
+templates.env.filters["dager"] = analyse.dager_mellom
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
 
@@ -169,7 +170,21 @@ def _vakt_kontekst(con, slug: str, b: dict) -> dict:
         "nabolag": analyse.nabolag(annonser, v["egen_km"]) if v.get("egen_km") else None,
         "kjoringer": analyse.historikk(con, slug, dager=180),
         "hendelser": db.ok(con, "SELECT * FROM hendelser WHERE slug=? ORDER BY id DESC LIMIT 60", (slug,)),
+        "liggetid": analyse.liggetid(solgte),
+        "egen_ute": _egen_ute(con, v, annonser + solgte),
+        "igjen": {r["kilde_id"] for r in con.execute(
+            "SELECT kilde_id FROM annonser WHERE slug=? AND ekstra LIKE '%forrige_kilde_id%'", (slug,))},
     }
+
+
+def _egen_ute(con, v: dict, annonser: list[dict]) -> list[dict]:
+    """Annonser i markedet som er eierens egen bil (samme reg.nr eller understellsnummer)."""
+    kj = v.get("kjoretoy") or {}
+    regnr = (v.get("regnr") or kj.get("regnr") or "").replace(" ", "").upper()
+    vin = (kj.get("understellsnummer") or "").strip().upper()
+    if not regnr and not vin:
+        return []
+    return [a for a in annonser if (vin and a.get("vin") == vin) or (regnr and a.get("regnr") == regnr)]
 
 
 @app.get("/helse")

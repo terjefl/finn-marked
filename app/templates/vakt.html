@@ -34,8 +34,16 @@
        <div class="nokkel">{{ filtrert_oppsummering.km_median | kr }}</div>
        <div class="dempet">spenn {{ filtrert_oppsummering.km_min }}–{{ filtrert_oppsummering.km_max }} km</div></div>
   <div class="kort"><div class="dempet">Solgt (registrert)</div><div class="nokkel">{{ solgte | length }}</div>
-       <div class="dempet">FINN markerer solgte annonser i søket</div></div>
+       <div class="dempet">{% if liggetid %}median liggetid {{ liggetid.median | round | int }} dager ({{ liggetid.min }}–{{ liggetid.max }}){% else %}FINN markerer solgte annonser i søket{% endif %}</div></div>
 </div>
+
+{% if egen_ute %}
+<div class="kort" style="border-color:var(--advarsel)">
+  <strong>Din bil ligger ute på FINN.</strong>
+  {% for a in egen_ute %}<a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or '' }}</a>
+  – {{ a.pris | kr }} kr{% if a.solgt %}, solgt {{ a.solgt_dato }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
+</div>
+{% endif %}
 
 {% if v.kjoretoy %}
 <div class="kort bil">
@@ -121,7 +129,7 @@
   <tbody>
   {% for h in hendelser %}
     <tr><td class="dempet tid">{{ h.tid[:10] }}<br>{{ h.tid[11:16] }}</td>
-        <td class="skjul-m"><span class="pill {% if h.type == 'solgt' %}solgt{% endif %}">{{ h.type }}</span></td>
+        <td class="skjul-m"><span class="pill {% if h.type == 'solgt' %}solgt{% elif h.type == 'egen' %}v2{% elif h.type == 'igjen' %}v1{% endif %}">{{ h.type }}</span></td>
         <td>{% if h.lenke %}<a href="{{ h.lenke }}" target="_blank">{{ h.tekst }}</a>{% else %}{{ h.tekst }}{% endif %}</td></tr>
   {% endfor %}
   </tbody>
@@ -148,7 +156,7 @@
       <td class="tall">{{ a.pris | kr }}{% if a.pris_type == 'bud' %} <span class="dempet">bud</span>{% endif %}</td>
       <td class="tall">{{ a.km | kr }}</td>
       <td class="skjul-m">{{ a.aar or "–" }}</td>
-      <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or "" }}</a>
+      <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or "" }}</a>{% if a.kilde_id in igjen %} <span class="pill v2" title="Samme bil har vært ute før">igjen</span>{% endif %}
           <span class="bare-m dempet"><br>{{ a.aar or "" }}{% if a.sted %} · {{ a.sted }}{% endif %}{% if a.selger_type %} · {{ a.selger_type }}{% endif %}</span></td>
       <td class="skjul-m">{{ a.sted or "–" }}</td>
       <td class="skjul-m">{{ a.selger_type or "–" }}{% if a.selger %} <span class="dempet">{{ a.selger }}</span>{% endif %}</td>
@@ -162,18 +170,19 @@
 {% if solgte %}
 <h2>Solgt siden overvåkingen startet ({{ solgte | length }})</h2>
 <div class="tabell"><table>
-  <thead><tr><th>Km</th><th>Annonse</th><th>Sist sett til</th><th>Solgt</th><th class="skjul-m">Lå ute</th></tr></thead>
+  <thead><tr><th>Km</th><th>Annonse</th><th>Sist utropspris</th><th>Solgt</th><th>Lå ute</th></tr></thead>
   <tbody>
   {% for a in solgte %}
     <tr><td>{{ a.km | kr }}</td>
         <td>{{ a.tittel }} {{ a.undertittel or "" }}</td>
         <td>{{ a.pris | kr }}</td>
         <td>{{ a.solgt_dato or "–" }}</td>
-        <td class="dempet skjul-m">{{ a.forst_sett }} → {{ a.solgt_dato or "?" }}</td></tr>
+        <td class="dempet">{% set d = (a.lagt_ut or a.forst_sett) | dager(a.solgt_dato) %}{% if d is not none %}{{ d }} dager{% else %}–{% endif %}
+            <span class="skjul-m">· {{ a.lagt_ut or a.forst_sett }}{% if not a.lagt_ut %} (først sett){% endif %}</span></td></tr>
   {% endfor %}
   </tbody>
 </table></div>
-<p class="dempet">Liggetiden måles fra første observasjon i basen, ikke fra annonsen ble lagt ut.</p>
+<p class="dempet">Liggetiden måles fra annonsen ble lagt ut på FINN; for annonser uten den datoen fra første observasjon i basen.</p>
 {% endif %}
 
 <h2>Hentingshistorikk</h2>

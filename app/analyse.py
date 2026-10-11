@@ -227,3 +227,31 @@ def kategoriforslag(annonser: list[dict], eksisterende: dict | None = None, maks
     ut = [(visning[n], c) for n, c in telling.items() if minst <= c <= tak]
     ut.sort(key=lambda p: (-p[1], p[0].lower()))
     return ut[:maks]
+
+
+def liggetid(solgte: list[dict]) -> dict | None:
+    """Dager fra annonsen ble lagt ut (FINN sin dato; ellers første gang vi så den) til
+    den ble registrert solgt. Median og antall, eller None uten data."""
+    from datetime import date as _date
+    dager = []
+    for a in solgte:
+        fra, til = a.get("lagt_ut") or a.get("forst_sett"), a.get("solgt_dato")
+        try:
+            d = (_date.fromisoformat(til[:10]) - _date.fromisoformat(fra[:10])).days
+        except (TypeError, ValueError):
+            continue
+        if d >= 0:
+            dager.append(d)
+    if not dager:
+        return None
+    dager.sort()
+    return {"antall": len(dager), "median": statistics.median(dager), "min": dager[0], "max": dager[-1],
+            "fra_finn": sum(1 for a in solgte if a.get("lagt_ut"))}
+
+
+def dager_mellom(fra: str | None, til: str | None) -> int | None:
+    from datetime import date as _date
+    try:
+        return (_date.fromisoformat(til[:10]) - _date.fromisoformat(fra[:10])).days
+    except (TypeError, ValueError):
+        return None

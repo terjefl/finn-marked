@@ -75,34 +75,57 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
         raise RuntimeError("avbrutt, ingenting skrevet — parsingen ga nesten ingen treff: "
                            + "; ".join(avbrutt))
 
-    nye = prisendret = solgte = borte = 0
+    nye = prisendret = solgte = borte = igjen = 0
     i_dag = date.today().isoformat()
     sett = set(alle)
+    egen = _egen_bil(v)
     for (kilde, kilde_id), a in alle.items():
         a["tagger"] = kilder_finn_kategoriser(a, v, sorted(x for x in a.pop("sok_tagger") if x))
+        ekstra = a.get("ekstra") or {}
+        regnr, vin, lagt_ut = ekstra.get("regnr"), ekstra.get("vin"), ekstra.get("lagt_ut")
         rad = con.execute("SELECT * FROM annonser WHERE slug=? AND kilde=? AND kilde_id=?",
                           (slug, kilde, kilde_id)).fetchone()
         if rad is None:
             nye += 1
+            forrige = _samme_bil(con, slug, kilde, kilde_id, vin, regnr)
+            if forrige:
+                igjen += 1
+                ekstra["forrige_kilde_id"] = forrige["kilde_id"]
+                a["ekstra"] = ekstra
             con.execute(
                 """INSERT INTO annonser (slug, kilde, kilde_id, tittel, undertittel, aar, km, drivstoff,
                        rekkevidde, pris, pris_type, sted, selger, selger_type, url, tagger, sok_tagger,
-                       ekstra, forst_sett, sist_sett, borte_dato, aktiv, merke, solgt, solgt_dato)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?,?)""",
+                       ekstra, forst_sett, sist_sett, borte_dato, aktiv, merke, solgt, solgt_dato,
+                       regnr, vin, lagt_ut)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?)""",
                 (slug, kilde, kilde_id, a["tittel"], a["undertittel"], a["aar"], a["km"], a["drivstoff"],
                  a["rekkevidde"], a["pris"], a["pris_type"], a["sted"], a["selger"], a["selger_type"],
                  a["url"], a["tagger"], json.dumps(a.get("sok_tagger_liste") or [], ensure_ascii=False),
                  json.dumps(a.get("ekstra") or {}, ensure_ascii=False), i_dag, i_dag,
                  1 if not a["solgt"] else 0, a["merke"], 1 if a["solgt"] else 0,
-                 i_dag if a["solgt"] else None))
+                 i_dag if a["solgt"] else None, regnr, vin, lagt_ut))
             if a["pris"]:
                 con.execute("""INSERT INTO pris_historikk (slug, kilde, kilde_id, dato, pris, pris_type)
                                VALUES (?,?,?,?,?,?)""",
                             (slug, kilde, kilde_id, i_dag, a["pris"], a["pris_type"]))
-            db.hendelse(con, slug, "solgt" if a["solgt"] else "ny", a["url"],
-                        f"{'Solgt: ' if a['solgt'] else 'Ny annonse: '}{_tittel(a)}".strip(),
-                        {"pris": a["pris"], "km": a["km"], "sted": a["sted"], "url": a["url"],
-                         "kilde": kilde, "kilde_id": kilde_id, "pris_type": a["pris_type"]})
+            detaljer = {"pris": a["pris"], "km": a["km"], "sted": a["sted"], "url": a["url"],
+                        "kilde": kilde, "kilde_id": kilde_id, "pris_type": a["pris_type"]}
+            if forrige and not a["solgt"]:
+                detaljer["forrige"] = {"kilde_id": forrige["kilde_id"], "pris": forrige["pris"],
+                                       "sist_sett": forrige["sist_sett"], "solgt": forrige["solgt"]}
+                db.hendelse(con, slug, "igjen", a["url"],
+                            f"Lagt ut på nytt: {_tittel(a)} {_pris(a['pris'], a['pris_type'])} "
+                            f"(forrige annonse {_pris(forrige['pris'], forrige['pris_type'])}, "
+                            f"sist sett {forrige['sist_sett']}{', solgt' if forrige['solgt'] else ''})",
+                            detaljer)
+            else:
+                db.hendelse(con, slug, "solgt" if a["solgt"] else "ny", a["url"],
+                            f"{'Solgt: ' if a['solgt'] else 'Ny annonse: '}{_tittel(a)}".strip(), detaljer)
+            if egen and _er_egen(egen, regnr, vin):
+                db.hendelse(con, slug, "egen", a["url"],
+                            f"Din bil ligger ute: {_tittel(a)} {_pris(a['pris'], a['pris_type'])}",
+                            {"pris": a["pris"], "km": a["km"], "url": a["url"], "kilde": kilde,
+                             "kilde_id": kilde_id, "regnr": regnr})
         else:
             if not rad["solgt"] and a["solgt"]:
                 solgte += 1
@@ -124,13 +147,15 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
                 """UPDATE annonser SET tittel=?, undertittel=?, aar=?, km=?, drivstoff=?, rekkevidde=?,
                        pris=COALESCE(?, pris), pris_type=?, sted=?, selger=?, selger_type=?, tagger=?,
                        ekstra=?, sist_sett=?, aktiv=?, borte_dato=NULL, merke=?, solgt=?,
-                       solgt_dato=COALESCE(?, solgt_dato)
+                       solgt_dato=COALESCE(?, solgt_dato),
+                       regnr=COALESCE(?, regnr), vin=COALESCE(?, vin), lagt_ut=COALESCE(?, lagt_ut)
                    WHERE slug=? AND kilde=? AND kilde_id=?""",
                 (a["tittel"], a["undertittel"], a["aar"], a["km"], a["drivstoff"], a["rekkevidde"],
                  a["pris"], a["pris_type"], a["sted"], a["selger"], a["selger_type"], a["tagger"],
-                 json.dumps(a.get("ekstra") or {}, ensure_ascii=False), i_dag,
+                 json.dumps(_behold_ekstra(rad, a), ensure_ascii=False), i_dag,
                  0 if a["solgt"] else 1, a["merke"], 1 if a["solgt"] else rad["solgt"] or 0,
-                 i_dag if (a["solgt"] and not rad["solgt"]) else None, slug, kilde, kilde_id))
+                 i_dag if (a["solgt"] and not rad["solgt"]) else None,
+                 regnr, vin, lagt_ut, slug, kilde, kilde_id))
 
     for rad in con.execute("SELECT * FROM annonser WHERE slug=? AND aktiv=1", (slug,)).fetchall():
         if (rad["kilde"], rad["kilde_id"]) not in sett:
@@ -159,7 +184,8 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
                  priser[0] if priser else None, priser[-1] if priser else None, varighet))
     kilder_txt = ", ".join(f"{k}: {n}" for k, n in sorted(treff.items()))
     status = (f"OK: {len(alle)} annonser lest ({kilder_txt}), {len(priser)} til salgs med pris, "
-              f"{nye} nye, {prisendret} prisendringer, {solgte} solgt, {borte} borte ({varighet}s)")
+              f"{nye} nye{f' ({igjen} lagt ut på nytt)' if igjen else ''}, {prisendret} prisendringer, "
+              f"{solgte} solgt, {borte} borte ({varighet}s)")
     if advarsler:
         status += " | ADVARSEL: " + "; ".join(advarsler)
     con.execute("UPDATE vakter SET sist_hentet=?, sist_status=? WHERE slug=?",
@@ -169,8 +195,50 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
     con.commit()
     logg(status)
     return {"slug": slug, "annonser": len(alle), "treff": treff_totalt, "aktive": len(priser),
-            "nye": nye, "prisendringer": prisendret, "solgt": solgte, "borte": borte,
+            "nye": nye, "igjen": igjen, "prisendringer": prisendret, "solgt": solgte, "borte": borte,
             "varighet": varighet, "advarsler": advarsler, "status": status}
+
+
+def _samme_bil(con, slug: str, kilde: str, kilde_id: str, vin: str | None, regnr: str | None):
+    """Forrige annonse for samme bil (understellsnummer, ellers reg.nr) i dette markedet.
+    Det er slik en bil som legges ut på nytt med ny annonse-id gjenkjennes."""
+    if not vin and not regnr:
+        return None
+    if vin:
+        r = con.execute("""SELECT kilde_id, pris, pris_type, sist_sett, solgt FROM annonser
+                           WHERE slug=? AND kilde=? AND kilde_id!=? AND vin=? ORDER BY sist_sett DESC LIMIT 1""",
+                        (slug, kilde, kilde_id, vin)).fetchone()
+        if r:
+            return r
+    if regnr:
+        return con.execute("""SELECT kilde_id, pris, pris_type, sist_sett, solgt FROM annonser
+                              WHERE slug=? AND kilde=? AND kilde_id!=? AND regnr=? ORDER BY sist_sett DESC LIMIT 1""",
+                           (slug, kilde, kilde_id, regnr)).fetchone()
+    return None
+
+
+def _egen_bil(v: dict) -> dict | None:
+    """Reg.nr og understellsnummer for eierens egen bil, hvis vakten har det."""
+    kj = v.get("kjoretoy") or {}
+    regnr = (v.get("regnr") or kj.get("regnr") or "").replace(" ", "").upper() or None
+    vin = (kj.get("understellsnummer") or "").strip().upper() or None
+    return {"regnr": regnr, "vin": vin} if (regnr or vin) else None
+
+
+def _er_egen(egen: dict, regnr: str | None, vin: str | None) -> bool:
+    return bool((vin and egen.get("vin") and vin == egen["vin"]) or (regnr and egen.get("regnr") and regnr == egen["regnr"]))
+
+
+def _behold_ekstra(rad, a: dict) -> dict:
+    """Ny ekstra-dict fra kilden, men «forrige_kilde_id» (satt ved første observasjon) skal overleve."""
+    ny = dict(a.get("ekstra") or {})
+    try:
+        gammel = json.loads(rad["ekstra"] or "{}")
+    except (TypeError, ValueError):
+        gammel = {}
+    if gammel.get("forrige_kilde_id") and "forrige_kilde_id" not in ny:
+        ny["forrige_kilde_id"] = gammel["forrige_kilde_id"]
+    return ny
 
 
 def _tittel(a: dict) -> str:

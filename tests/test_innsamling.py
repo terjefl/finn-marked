@@ -42,14 +42,14 @@ class FalskKilde:
         return [dict(a) for a in _FEED["annonser"]], _FEED["treff"]
 
 
-def annonse(finn_id: str, pris: int | None = 200000, solgt: bool = False) -> dict:
+def annonse(finn_id: str, pris: int | None = 200000, solgt: bool = False, ekstra: dict | None = None) -> dict:
     return {
         "kilde": "falsk", "kilde_id": finn_id, "url": f"https://example.invalid/{finn_id}",
         "tittel": f"Bil {finn_id}", "undertittel": None, "aar": 2020, "km": 50000,
         "drivstoff": "El", "rekkevidde": 400, "pris": pris,
         "pris_type": "solgt" if solgt else "utropspris", "sted": "Oslo",
         "selger": None, "selger_type": None, "merke": "Solgt" if solgt else None,
-        "solgt": solgt, "ekstra": {},
+        "solgt": solgt, "ekstra": dict(ekstra or {}),
     }
 
 
@@ -140,6 +140,36 @@ def hoved() -> int:
         _FEED["treff"] = 1
         r = innsamling.hent_vakt(con, v)
         sjekk("normal avviksmengde: ingen advarsel", r["advarsler"], [])
+
+        # 8) Samme bil lagt ut på nytt (nytt kilde_id, samme understellsnummer) → «igjen», ikke «ny»
+        _FEED["annonser"] = [annonse("1", pris=190000, ekstra={"vin": "VIN123", "regnr": "AB12345", "lagt_ut": "2026-09-01"})]
+        _FEED["treff"] = 1
+        innsamling.hent_vakt(con, v)
+        sjekk("vin/regnr/lagt_ut lagret",
+              tuple(con.execute("SELECT vin, regnr, lagt_ut FROM annonser WHERE kilde_id='1'").fetchone()),
+              ("VIN123", "AB12345", "2026-09-01"))
+        _FEED["annonser"] = [annonse("9", pris=185000, ekstra={"vin": "VIN123", "regnr": "AB12345", "lagt_ut": "2026-10-10"})]
+        r = innsamling.hent_vakt(con, v)
+        sjekk("igjen: telles", (r["nye"], r["igjen"]), (1, 1))
+        sjekk("igjen: hendelsestype", hendelser(con)[-2][0], "igjen")
+        sjekk("igjen: forrige annonse i detaljer",
+              "forrige_kilde_id" in con.execute("SELECT ekstra FROM annonser WHERE kilde_id='9'").fetchone()["ekstra"], True)
+        sjekk("igjen: annonse 1 markert borte", hendelser(con)[-1][0], "borte")
+        innsamling.hent_vakt(con, v)
+        sjekk("igjen: forrige_kilde_id overlever oppdatering",
+              "forrige_kilde_id" in con.execute("SELECT ekstra FROM annonser WHERE kilde_id='9'").fetchone()["ekstra"], True)
+
+        # 9) Egen bil dukker opp i markedet (vakten har reg.nr)
+        v_egen = dict(v, slug="egen", regnr="ZZ99999", kjoretoy={"understellsnummer": "VINEGEN"})
+        _FEED["annonser"] = [annonse("50", ekstra={"vin": "VINEGEN", "regnr": "ZZ99999"}), annonse("51", ekstra={"vin": "ANNEN"})]
+        _FEED["treff"] = 2
+        innsamling.hent_vakt(con, v_egen)
+        typer = [t for t, _ in con.execute("SELECT type, tekst FROM hendelser WHERE slug='egen' ORDER BY id")]
+        sjekk("egen bil: hendelse", typer.count("egen"), 1)
+        sjekk("egen bil: bare én gang", [h for h in hendelser(con) if h[0] == "egen"][0][1].startswith("Din bil ligger ute"), True)
+        innsamling.hent_vakt(con, v_egen)
+        sjekk("egen bil: ikke på nytt neste dag",
+              con.execute("SELECT COUNT(*) c FROM hendelser WHERE slug='egen' AND type='egen'").fetchone()["c"], 1)
 
         con.close()
     finally:
