@@ -3,16 +3,17 @@
 Sider:  /                          – alle vakter med nøkkeltall
         /vakt/<slug>               – dashbord for ett marked
         /vakt/ny, /vakt/<slug>/rediger – skjema for søk (flere vakter samtidig)
-        /vakt/<slug>/annonser      – full annonseliste (også JSON)
 API:    /api/vakter, /api/vakt/<slug>, /api/vakt/<slug>/endringer?since=ISO
-        /helse                     – for Docker healthcheck
+        /api/vakt/<slug>/annonser.json – annonselisten som JSON
+        /helse                     – for Docker healthcheck (og scheduler-tilstand)
+
+Søke-oppsettet fra skjemaet parses i `app/sok.py`, ikke her.
 """
 
 from __future__ import annotations
 
 import json
 import threading
-import urllib.parse
 from datetime import date
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import analyse, db, innsamling
+from .sok import parse_kategorier, parse_sok
 
 BASE = Path(__file__).parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
@@ -207,46 +209,6 @@ def rediger(request: Request, slug: str):
         con.close()
 
 
-def _kilde_fra_url(url: str) -> str:
-    """Kilden utledes av vertsnavnet — da slipper brukeren å huske kildenavnet,
-    og en limt inn søke-URL fra auksjonen.no treffer riktig adapter."""
-    vert = urllib.parse.urlparse(url).netloc.lower()
-    if "auksjonen.no" in vert:
-        return "auksjonen"
-    return "finn"
-
-
-def _parse_sok(tekst: str) -> list[dict]:
-    """Ett søk per linje, på formen `[kilde:][tag] | <url>` (tag kan utelates).
-
-    Kilden utledes av URL-en når den ikke står eksplisitt; skriv `auksjonen:auksjon`
-    bare hvis du vil overstyre.
-    """
-    ut = []
-    for linje in (tekst or "").splitlines():
-        linje = linje.strip()
-        if not linje or linje.startswith("#"):
-            continue
-        merke, url = ([d.strip() for d in linje.split("|", 1)] if "|" in linje else ("", linje))
-        if not url.startswith("http"):
-            continue
-        kilde, tag = None, merke or None
-        if merke and ":" in merke:
-            kilde, tag = [d.strip() for d in merke.split(":", 1)]
-        kilde = kilde or _kilde_fra_url(url)
-        ut.append({"kilde": kilde, "tag": tag or ("alle" if kilde == "finn" else kilde), "url": url})
-    return ut
-
-
-def _parse_kategorier(tekst: str) -> dict:
-    """Ett par per linje: `nokkel = Visningsnavn` (nøkkelen matcher q=-tag og fritekst-nøkkel)."""
-    ut = {}
-    for linje in (tekst or "").splitlines():
-        if "=" in linje:
-            k, navn = [d.strip() for d in linje.split("=", 1)]
-            if k:
-                ut[k] = navn or k
-    return ut
 
 
 @app.post("/vakt/lagre")
@@ -260,7 +222,7 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(...),
     try:
         eksisterende = db.vakt(con, ren)
         db.lagre_vakt(con, {
-            "slug": ren, "navn": navn, "sok": _parse_sok(sok), "kategorier": _parse_kategorier(kategorier),
+            "slug": ren, "navn": navn, "sok": parse_sok(sok), "kategorier": parse_kategorier(kategorier),
             "egen_bil": egen_bil or None, "egen_km": int(egen_km) if egen_km.strip().isdigit() else None,
             "hentetime": hentetime, "aktiv": 1 if aktiv else 0,
             "opprettet": eksisterende.get("opprettet") if eksisterende else None,
