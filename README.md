@@ -159,5 +159,6 @@ Bare annonser og prispunkter for `--slug` importeres.
    `hent(sok, logg) -> (annonser, treff)`.
 2. Normaliser annonsene til felles-formatet i `app/kilder/__init__.py`.
 3. Registrer klassen med `registrer(...)` nederst i modulen.
-4. Søket skrives som `[kilde:][tag] | url` i skjemaet — kilden utledes av URL-en
-   hvis den ikke står eksplisitt (se «Nye vakter»).
+4. Legg vertsnavnet inn i `sok.kilde_fra_url` og `sok.sjekk_url`, og gi modulen en
+   `forhandsvis(url)` (se `finn.py`) så «Ny vakt» kan vise første side. Kilden kan
+   også velges eksplisitt per søkerad i skjemaet.

@@ -1,4 +1,4 @@
 # Til lint og tester (tests/test_auth.py bruker FastAPI sin TestClient, som trenger httpx).
 -r requirements.txt
-ruff==0.14.0
+ruff==0.17.0
 httpx==0.28.1
