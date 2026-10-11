@@ -175,3 +175,4 @@ td.tall { white-space:nowrap; }
   input[type=text], input[type=number], input[type=url], select, textarea { font-size:16px; } /* hindrer auto-zoom på iOS */
   .hero svg { max-width:260px; }
 }
+.kort.bil { border-left:4px solid var(--aksent); }

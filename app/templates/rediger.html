@@ -90,7 +90,13 @@
   <div class="kort">
     <h2 style="margin-top:0">Egen bil og henting</h2>
     <div class="rutenett skjema">
-      <div><label for="egen_bil" style="margin-top:0">Egen bil (valgfritt — vises i verdiestimatet)</label>
+      <div><label for="regnr" style="margin-top:0">Registreringsnummer (valgfritt)</label>
+        <div style="display:flex; gap:6px">
+          <input type="text" id="regnr" name="regnr" value="{{ skjema.regnr }}" placeholder="EB12345" autocapitalize="characters" style="max-width:160px">
+          <button type="button" class="lett" id="slaa-opp">Slå opp</button>
+        </div>
+        <div class="dempet" id="kjoretoy-info" style="margin-top:6px">{% if skjema.kjoretoy %}{{ skjema.kjoretoy.beskrivelse }}{% if skjema.kjoretoy.forste_registrert %} · reg. {{ skjema.kjoretoy.forste_registrert }}{% endif %}{% if skjema.kjoretoy.eu_frist %} · EU-kontroll innen {{ skjema.kjoretoy.eu_frist }}{% endif %}{% else %}Slås opp hos Statens vegvesen og fyller inn «Egen bil».{% endif %}</div></div>
+      <div><label for="egen_bil" style="margin-top:0">Egen bil (vises i verdiestimatet)</label>
         <input type="text" id="egen_bil" name="egen_bil" value="{{ skjema.egen_bil }}" placeholder="BMW i4 M50 xDrive 2022"></div>
       <div><label for="egen_km" style="margin-top:0">Egen kilometerstand</label>
         <input type="number" id="egen_km" name="egen_km" value="{{ skjema.egen_km }}" placeholder="56028"></div>
@@ -152,6 +158,32 @@
   document.getElementById('nytt-sok').addEventListener('click', () => nyRad('sok-mal', 'sok-rader').querySelector('.url').focus());
   document.getElementById('ny-kat').addEventListener('click', () => nyRad('kat-mal', 'kat-rader').querySelector('.navn').focus());
   if (!document.querySelector('.sok-rad')) nyRad('sok-mal', 'sok-rader');
+  // Egen bil fra registreringsnummer
+  const regnr = document.getElementById('regnr'), info = document.getElementById('kjoretoy-info');
+  async function slaaOpp() {
+    const r = regnr.value.trim();
+    if (!r) return;
+    info.textContent = 'Slår opp hos Vegvesenet …';
+    try {
+      const res = await fetch('/api/kjoretoy?regnr=' + encodeURIComponent(r));
+      const d = await res.json();
+      if (d.feil) { info.textContent = d.feil; return; }
+      const k = d.kjoretoy;
+      const biter = [k.beskrivelse];
+      if (k.forste_registrert) biter.push('reg. ' + k.forste_registrert);
+      if (k.drivstoff) biter.push(k.drivstoff);
+      if (k.effekt_kw) biter.push(Math.round(k.effekt_kw * 1.36) + ' hk');
+      if (k.rekkevidde_km) biter.push(k.rekkevidde_km + ' km rekkevidde');
+      if (k.eu_frist) biter.push('EU-kontroll innen ' + k.eu_frist);
+      info.textContent = biter.join(' · ');
+      const bil = document.getElementById('egen_bil');
+      if (!bil.value.trim() || bil.dataset.auto) { bil.value = k.beskrivelse; bil.dataset.auto = '1'; }
+    } catch (e) { info.textContent = 'Oppslaget feilet: ' + e.message; }
+  }
+  document.getElementById('slaa-opp').addEventListener('click', slaaOpp);
+  regnr.addEventListener('change', slaaOpp);
+  document.getElementById('egen_bil').addEventListener('input', e => { delete e.target.dataset.auto; });
+
   document.querySelectorAll('#forslag a').forEach(a => a.addEventListener('click', e => {
     e.preventDefault();
     nyRad('kat-mal', 'kat-rader', { navn: a.dataset.navn, nokkel: slugify(a.dataset.navn) });

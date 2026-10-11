@@ -30,6 +30,7 @@ jobs:
           python tests/test_auksjonen.py
           python tests/test_sok.py
           python tests/test_auth.py
+          python tests/test_kjoretoy.py
 
   bygg:
     needs: sjekk

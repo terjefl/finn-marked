@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""Tester for kjøretøyoppslaget (app/kjoretoy.py). Kjør: `python3 tests/test_kjoretoy.py`.
+
+Fixturen følger Vegvesenets OpenAPI-skjema for /enkeltoppslag/kjoretoydata
+(KjoretoydataResponse). Ingen nettkall."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from app import kjoretoy  # noqa: E402
+
+feil: list[str] = []
+
+
+def sjekk(navn: str, faktisk, ventet) -> None:
+    ok = faktisk == ventet
+    print(f"{'OK  ' if ok else 'FEIL'} {navn}: {faktisk!r}" + ("" if ok else f" (ventet {ventet!r})"))
+    if not ok:
+        feil.append(navn)
+
+
+SVAR = {"kjoretoydataListe": [{
+    "kjoretoyId": {"kjennemerke": "EB12345", "understellsnummer": "WBY31AW0X0FL12345"},
+    "forstegangsregistrering": {"registrertForstegangNorgeDato": "2022-03-18"},
+    "registrering": {"registrertForstegangPaEierskap": "2024-06-01",
+                     "registreringsstatus": {"kodeNavn": "Registrert"}},
+    "periodiskKjoretoyKontroll": {"kontrollfrist": "2026-03-18"},
+    "godkjenning": {"tekniskGodkjenning": {"tekniskeData": {
+        "generelt": {"merke": [{"merke": "BMW", "merkeKode": "0043"}], "handelsbetegnelse": ["I4"],
+                     "typebetegnelse": "M50 xDrive"},
+        "karosseriOgLasteplan": {"rFarge": [{"kodeNavn": "Grå"}]},
+        "miljodata": {"miljoOgdrivstoffGruppe": [{"drivstoffKodeMiljodata": {"kodeNavn": "Elektrisk"},
+                                                  "forbrukOgUtslipp": [{"rekkeviddeKm": 510}, {"rekkeviddeKm": 0}]}]},
+        "motorOgDrivverk": {"utelukkendeElektriskDrift": True, "hybridElektriskKjoretoy": False,
+                            "motor": [{"drivstoff": [{"maksNettoEffekt": 400.0}]}]},
+        "vekter": {"egenvekt": 2290, "tillattTotalvekt": 2605, "tillattTilhengervektMedBrems": 1600},
+    }}},
+}]}
+
+
+def hoved() -> int:
+    sjekk("rens_regnr", kjoretoy.rens_regnr(" eb 12-345 "), "EB12345")
+    for ugyldig in ("", "E", "EB1234567890", "EB 12*45"):
+        try:
+            kjoretoy.rens_regnr(ugyldig)
+            sjekk(f"rens_regnr avviser {ugyldig!r}", False, True)
+        except kjoretoy.Oppslagsfeil:
+            sjekk(f"rens_regnr avviser {ugyldig!r}", True, True)
+
+    k = kjoretoy.normaliser(SVAR, "EB12345")
+    sjekk("merke/modell", (k["merke"], k["modell"], k["typebetegnelse"]), ("BMW", "I4", "M50 xDrive"))
+    sjekk("beskrivelse", k["beskrivelse"], "BMW I4 M50 xDrive 2022")
+    sjekk("årsmodell", k["aar"], 2022)
+    sjekk("første registrering", k["forste_registrert"], "2022-03-18")
+    sjekk("på eier siden", k["registrert_paa_eier"], "2024-06-01")
+    sjekk("drivstoff", k["drivstoff"], "Elektrisk")
+    sjekk("elektrisk", k["elektrisk"], True)
+    sjekk("effekt", (k["effekt_kw"], kjoretoy.hk(k["effekt_kw"])), (400.0, 544))
+    sjekk("rekkevidde (største, ikke 0)", k["rekkevidde_km"], 510)
+    sjekk("farge", k["farge"], "Grå")
+    sjekk("eu-frist", k["eu_frist"], "2026-03-18")
+    sjekk("tilhengervekt", k["tilhengervekt"], 1600)
+    sjekk("understellsnummer", k["understellsnummer"], "WBY31AW0X0FL12345")
+
+    # Feilveier
+    for navn, data in (("tomt svar", {"kjoretoydataListe": []}),
+                       ("feilmelding", {"feilmelding": "Ugyldig kjennemerke"}),
+                       ("ikke dict", [])):
+        try:
+            kjoretoy.normaliser(data, "X")
+            sjekk(f"normaliser feiler på {navn}", False, True)
+        except kjoretoy.Oppslagsfeil:
+            sjekk(f"normaliser feiler på {navn}", True, True)
+
+    # Minimalt svar skal ikke krasje
+    m = kjoretoy.normaliser({"kjoretoydataListe": [{"kjoretoyId": {"kjennemerke": "AB1234"}}]})
+    sjekk("minimalt svar", (m["regnr"], m["merke"], m["beskrivelse"]), ("AB1234", None, ""))
+
+    # Uten nøkkel: tydelig feil, ingen nettkall
+    kjoretoy.os.environ.pop("FINN_SVV_NOKKEL", None)
+    try:
+        kjoretoy.slaa_opp("EB12345")
+        sjekk("uten nøkkel", False, True)
+    except kjoretoy.Oppslagsfeil as e:
+        sjekk("uten nøkkel", "FINN_SVV_NOKKEL" in str(e), True)
+
+    print()
+    if feil:
+        print(f"{len(feil)} test(er) feilet: {', '.join(feil)}")
+        return 1
+    print("alle tester OK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(hoved())

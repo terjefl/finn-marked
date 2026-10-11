@@ -13,6 +13,8 @@ services:
       - FINN_ORIGIN=https://bilmarked.flagan.net
       # Valgfri: åpner /oppsett?nokkel=… for å gi en admin ny passkey (gjenoppretting).
       # - FINN_OPPSETT_NOKKEL=
+      # Statens vegvesen (egen bil fra registreringsnummer). Bestilles på vegvesen.no.
+      # - FINN_SVV_NOKKEL=
     ports:
       - "8099:8000"
     volumes:

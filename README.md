@@ -64,6 +64,18 @@ Miljøvariabler: `FINN_RP_ID` (vertsnavnet brukerne åpner, f.eks.
 utledes begge av forespørselen, som er greit lokalt (`localhost`), men sett dem i
 drift. Cloudflare Access foran tjenesten er uavhengig av dette og kan stå.
 
+## Egen bil fra registreringsnummer
+
+Skjemaet har et felt for registreringsnummer. «Slå opp» henter kjøretøyet fra
+Statens vegvesens åpne API (enkeltoppslag) og fyller inn «Egen bil»; vakt-siden
+viser merke/modell, første registrering, drivstoff, effekt, rekkevidde og frist for
+EU-kontroll. Kilometerstand finnes ikke der, den tastes fortsatt inn selv.
+
+Nøkkelen bestilles på vegvesen.no (BankID, svar med en gang) og settes som
+`FINN_SVV_NOKKEL`. Uten nøkkel sier skjemaet fra, og alt annet virker som før.
+Registreringsnummer er en personopplysning hos Vegvesenet: appen slår bare opp det
+brukeren selv taster inn på sin egen vakt, og lagrer et lite utdrag på vakten.
+
 ## API
 
 JSON-endepunktene krever samme sesjonscookie som sidene (brukes av «JSON»-knappen).
@@ -74,6 +86,7 @@ GET /api/vakter                              egne vakter + nøkkeltall (admin: a
 GET /api/vakt/<slug>                         full markedsdata for én vakt
 GET /api/vakt/<slug>/annonser.json           annonser (valgfritt ?kategori=)
 GET /api/forhandsvis?url=…                   første side av et søk (til «Ny vakt»)
+GET /api/kjoretoy?regnr=…                    egen bil fra Statens vegvesen
 GET /helse                                   helsesjekk (Docker healthcheck) + scheduler-tilstand, åpen
 ```
 
@@ -115,6 +128,7 @@ python3 tests/test_parser.py
 python3 tests/test_innsamling.py
 python3 tests/test_auksjonen.py
 python3 tests/test_sok.py
+python3 tests/test_kjoretoy.py
 # trenger fastapi/jinja2/webauthn/httpx (requirements-dev.txt)
 .venv/bin/python tests/test_auth.py
 .venv/bin/ruff check .

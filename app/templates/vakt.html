@@ -37,6 +37,26 @@
        <div class="dempet">FINN markerer solgte annonser i søket</div></div>
 </div>
 
+{% if v.kjoretoy %}
+<div class="kort bil">
+  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:baseline">
+    <div><span class="dempet">Egen bil</span><br><strong style="font-size:17px">{{ v.egen_bil or v.kjoretoy.beskrivelse }}</strong>
+      <span class="pill" style="margin-left:6px">{{ v.kjoretoy.regnr }}</span></div>
+    {% if v.egen_km %}<div class="dempet">{{ v.egen_km | kr }} km på telleren</div>{% endif %}
+  </div>
+  <div class="dempet" style="margin-top:6px">
+    {% if v.kjoretoy.forste_registrert %}Først registrert {{ v.kjoretoy.forste_registrert }}{% endif %}
+    {% if v.kjoretoy.registrert_paa_eier %} · på deg siden {{ v.kjoretoy.registrert_paa_eier }}{% endif %}
+    {% if v.kjoretoy.drivstoff %} · {{ v.kjoretoy.drivstoff }}{% endif %}
+    {% if v.kjoretoy.effekt_kw %} · {{ (v.kjoretoy.effekt_kw * 1.36) | round | int }} hk{% endif %}
+    {% if v.kjoretoy.rekkevidde_km %} · {{ v.kjoretoy.rekkevidde_km }} km rekkevidde{% endif %}
+    {% if v.kjoretoy.farge %} · {{ v.kjoretoy.farge | lower }}{% endif %}
+    {% if v.kjoretoy.eu_frist %} · <strong>EU-kontroll innen {{ v.kjoretoy.eu_frist }}</strong>{% endif %}
+    {% if v.kjoretoy.status and v.kjoretoy.status != 'Registrert' %} · {{ v.kjoretoy.status }}{% endif %}
+  </div>
+</div>
+{% endif %}
+
 {% if kurve %}
 <div class="kort">
   <h2 style="margin-top:0">Pris mot kilometerstand</h2>

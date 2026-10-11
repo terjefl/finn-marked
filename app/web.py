@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from . import analyse, auth, db, innsamling
+from . import analyse, auth, db, innsamling, kjoretoy
 from . import sok as sokmod
 from .sok import parse_kategorier, parse_sok
 
@@ -222,6 +222,15 @@ def ny_vakt(request: Request, url: str | None = None, navn: str = "", slug: str 
     return templates.TemplateResponse(request, "rediger.html", k)
 
 
+@app.get("/api/kjoretoy")
+def api_kjoretoy(regnr: str, b: dict = Depends(bruker)):
+    """Egen bil fra registreringsnummer (Statens vegvesen). Brukes av skjemaet."""
+    try:
+        return {"kjoretoy": kjoretoy.slaa_opp(regnr)}
+    except kjoretoy.Oppslagsfeil as e:
+        return {"feil": str(e)}
+
+
 @app.get("/api/forhandsvis")
 def api_forhandsvis(url: str, b: dict = Depends(bruker)):
     """Første side av et søk — til «Ny vakt». Henter fra kilden med én gang (1–2 s)."""
@@ -297,13 +306,15 @@ def _skjema_kontekst(v: dict | None) -> dict:
     if not v:
         return {"v": None, "kopi": None, "forslag": [], "brukere": [],
                 "skjema": {"navn": "", "slug": "", "eier": None, "sok": [], "kategorier": {},
-                           "egen_bil": "", "egen_km": "", "hentetime": 7, "aktiv": True}}
+                           "egen_bil": "", "egen_km": "", "regnr": "", "kjoretoy": None,
+                           "hentetime": 7, "aktiv": True}}
     sok = [{"tag": s.get("tag") or "", "url": s["url"], "kilde": s.get("kilde") or "finn",
             "auto": (s.get("kilde") or "finn") == sokmod.kilde_fra_url(s["url"])} for s in v["sok"]]
     return {"v": v, "kopi": None, "forslag": [], "brukere": [],
             "skjema": {"navn": v["navn"], "slug": v["slug"], "eier": v.get("eier"), "sok": sok,
                        "kategorier": v.get("kategorier") or {}, "egen_bil": v.get("egen_bil") or "",
-                       "egen_km": v.get("egen_km") or "", "hentetime": v.get("hentetime") or 7,
+                       "egen_km": v.get("egen_km") or "", "regnr": v.get("regnr") or "",
+                       "kjoretoy": v.get("kjoretoy"), "hentetime": v.get("hentetime") or 7,
                        "aktiv": bool(v.get("aktiv"))}}
 
 
@@ -336,6 +347,7 @@ def kopier(request: Request, slug: str, til: str = "", con: sqlite3.Connection =
         "navn": f"{v['navn']} ({mottaker['navn']})" if mottaker else f"{v['navn']} (kopi)",
         "slug": f"{v['slug']}-{sokmod.slugify(mottaker['navn'])}" if mottaker else f"{v['slug']}-kopi",
         "eier": mottaker["id"] if mottaker else a["id"], "egen_bil": "", "egen_km": "",
+        "regnr": "", "kjoretoy": None,
     })
     return templates.TemplateResponse(request, "rediger.html", k)
 
@@ -347,7 +359,7 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
           kategorier: str = Form(""), egen_bil: str = Form(""), egen_km: str = Form(""),
           hentetime: int = Form(7), aktiv: str | None = Form(None), eier: str = Form(""),
           sok_tag: list[str] = Form([]), sok_url: list[str] = Form([]), sok_kilde: list[str] = Form([]),
-          kat_navn: list[str] = Form([]), kat_nokkel: list[str] = Form([]),
+          kat_navn: list[str] = Form([]), kat_nokkel: list[str] = Form([]), regnr: str = Form(""),
           con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     """Skjemaet sender søk og kategorier som rader (sok_*/kat_*). De gamle tekstfeltene
     `sok`/`kategorier` godtas fortsatt, så eldre klienter og tester virker."""
@@ -363,8 +375,21 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
     ny_eier = int(eier) if (auth.er_admin(b) and eier.strip().isdigit()) else b["id"]
     if eksisterende and not eier.strip():
         ny_eier = eksisterende.get("eier") or ny_eier
+    # Egen bil fra regnr: slås opp på nytt bare når nummeret er nytt eller endret.
+    regnr = regnr.strip().upper().replace(" ", "")
+    kj = eksisterende.get("kjoretoy") if eksisterende else None
+    if regnr and not (kj and kj.get("regnr") == regnr):
+        try:
+            kj = kjoretoy.slaa_opp(regnr)
+        except kjoretoy.Oppslagsfeil:
+            kj = None                      # feilen vises ved «Slå opp» i skjemaet; lagringen stoppes ikke
+    elif not regnr:
+        kj = None
+    if kj and not egen_bil.strip():
+        egen_bil = kj["beskrivelse"]
     db.lagre_vakt(con, {
         "slug": ren, "navn": navn.strip() or ren, "sok": nye_sok, "kategorier": nye_kat,
+        "regnr": regnr or None, "kjoretoy": kj,
         "egen_bil": egen_bil or None, "egen_km": int(egen_km) if egen_km.strip().isdigit() else None,
         "hentetime": hentetime, "aktiv": 1 if aktiv else 0,
         "opprettet": eksisterende.get("opprettet") if eksisterende else None,
