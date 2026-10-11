@@ -12,7 +12,7 @@ import threading
 import time
 from datetime import date
 
-from . import db, kilder
+from . import analyse, db, kilder
 
 #: Vakter som hentes nå. Delt mellom web-ruta («Oppdater nå») og scheduleren, som
 #: ellers kunne hente samme vakt samtidig og skrive over hverandres annonser.
@@ -167,7 +167,6 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
                         f"({rad['km']} km, {_pris(rad['pris'], rad['pris_type'])})",
                         {"pris": rad["pris"], "km": rad["km"], "url": rad["url"], "kilde": rad["kilde"]})
 
-    from . import analyse
     ute = analyse.urimelige([dict(a, kilde_id=k[1]) for k, a in alle.items()])
     priser = sorted(a["pris"] for (_, kid), a in alle.items() if a["pris"] and not a["solgt"] and kid not in ute)
 
@@ -178,12 +177,18 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
 
     varighet = round(time.monotonic() - start, 1)
     treff_totalt = sum(treff.values()) if len(treff) > 1 else (max(treff.values()) if treff else 0)
+    # Prisindeks: hva markedet ber for en bil med REF_KM på telleren, uavhengig av hvilke
+    # biler som tilfeldigvis ligger ute. Medianen faller av seg selv når bilene eldes.
+    kurve = analyse.verdikurve([dict(a, kilde_id=k[1]) for k, a in alle.items() if not a["solgt"]], analyse.REF_KM)
+    indeks = int(round(kurve["estimat"])) if kurve and kurve.get("estimat") else None
     con.execute("""INSERT INTO kjøringer (slug, dato, annonser_hentet, treff, aktive, median, p25, p75,
-                                          min, max, varighet)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+                                          min, max, varighet, indeks, ref_km, r2, nye, solgte)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (slug, db.naa(), len(alle), treff_totalt, len(priser),
                  statistics.median(priser) if priser else None, pct(25), pct(75),
-                 priser[0] if priser else None, priser[-1] if priser else None, varighet))
+                 priser[0] if priser else None, priser[-1] if priser else None, varighet,
+                 indeks, analyse.REF_KM if indeks else None, round(kurve["r2"], 3) if kurve else None,
+                 nye, solgte))
     kilder_txt = ", ".join(f"{k}: {n}" for k, n in sorted(treff.items()))
     status = (f"OK: {len(alle)} annonser lest ({kilder_txt}), {len(priser)} til salgs med pris, "
               f"{nye} nye{f' ({igjen} lagt ut på nytt)' if igjen else ''}, {prisendret} prisendringer, "

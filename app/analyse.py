@@ -53,6 +53,7 @@ def er_utropspris(a: dict) -> bool:
     return (a.get("pris_type") or "utropspris") in ("utropspris", "fastpris")
 
 
+REF_KM = 60_000          # kilometerstanden prisindeksen regnes ved
 PRIS_GULV = 10_000       # kr: under dette er det aldri en bilpris
 PRIS_FAKTOR = 0.1        # … og under 10 % av medianen er det en månedspris, en feiltasting e.l.
 
@@ -135,11 +136,47 @@ def nabolag(annonser: list[dict], km: int, vindu: int = 10000) -> dict | None:
             "annonser": sorted(n, key=lambda a: a["pris"])}
 
 
-def historikk(con, slug: str, dager: int = 120) -> list[dict]:
-    return [dict(r) for r in con.execute(
-        "SELECT dato, aktive, median, p25, p75, min, max, treff FROM kjøringer "
-        "WHERE slug=? AND dato >= datetime('now','localtime', ?) ORDER BY dato",
-        (slug, f"-{dager} days"))]
+def historikk(con, slug: str, dager: int | None = None) -> list[dict]:
+    """Én rad per henting; hele historikken når `dager` er None (det er poenget med basen)."""
+    sql = ("SELECT dato, aktive, median, p25, p75, min, max, treff, indeks, ref_km, r2, nye, solgte "
+           "FROM kjøringer WHERE slug=?")
+    args: tuple = (slug,)
+    if dager:
+        sql += " AND dato >= datetime('now','localtime', ?)"
+        args = (slug, f"-{dager} days")
+    return [dict(r) for r in con.execute(sql + " ORDER BY dato", args)]
+
+
+def maanedsoversikt(con, slug: str) -> list[dict]:
+    """Per måned: nye, solgte, borte, snitt til salgs, median og indeks ved månedsslutt.
+    Salgstakt mot tilbud er det som sier om det er kjøpers eller selgers marked."""
+    rader: dict[str, dict] = {}
+
+    def rad(m: str) -> dict:
+        return rader.setdefault(m, {"maaned": m, "nye": 0, "solgte": 0, "borte": 0, "tilbud": None,
+                                    "median": None, "indeks": None})
+    for r in con.execute("SELECT substr(COALESCE(lagt_ut, forst_sett),1,7) m, COUNT(*) c FROM annonser "
+                         "WHERE slug=? GROUP BY m", (slug,)):
+        if r["m"]:
+            rad(r["m"])["nye"] = r["c"]
+    for r in con.execute("SELECT substr(solgt_dato,1,7) m, COUNT(*) c FROM annonser WHERE slug=? AND solgt=1 "
+                         "AND solgt_dato IS NOT NULL GROUP BY m", (slug,)):
+        rad(r["m"])["solgte"] = r["c"]
+    for r in con.execute("SELECT substr(borte_dato,1,7) m, COUNT(*) c FROM annonser WHERE slug=? AND solgt=0 "
+                         "AND borte_dato IS NOT NULL GROUP BY m", (slug,)):
+        rad(r["m"])["borte"] = r["c"]
+    for r in con.execute("SELECT substr(dato,1,7) m, AVG(aktive) a, AVG(median) md FROM kjøringer WHERE slug=? "
+                         "GROUP BY m", (slug,)):
+        x = rad(r["m"])
+        x["tilbud"] = round(r["a"]) if r["a"] is not None else None
+        x["median"] = round(r["md"]) if r["md"] is not None else None
+    for r in con.execute("SELECT substr(dato,1,7) m, indeks FROM kjøringer WHERE slug=? AND indeks IS NOT NULL "
+                         "ORDER BY dato", (slug,)):
+        rad(r["m"])["indeks"] = r["indeks"]           # siste i måneden vinner
+    ut = [rader[m] for m in sorted(rader)]
+    for x in ut:
+        x["omsetning"] = round(x["solgte"] / x["tilbud"] * 100) if x["tilbud"] else None   # % av tilbudet solgt
+    return ut
 
 
 def svg_kurve(annonser: list[dict], egen_km: int | None = None,
@@ -183,40 +220,80 @@ def svg_kurve(annonser: list[dict], egen_km: int | None = None,
             f'<text x="12" y="18" fill="var(--muted-foreground)" font-size="12">Utropspris</text></svg>')
 
 
-def svg_historikk(kjoringer: list[dict], bredde: int = 720, hoyde: int = 220, m: int = 58) -> str:
-    """Median utropspris per henting som enkel SVG-linje (én prikk per kjøring).
-
-    Tabellen under viser de samme tallene, men en linje gjør utviklingen over
-    måneder lesbar uten å bla.
-    """
-    ser = [(k["dato"], k["median"]) for k in kjoringer if k.get("median")]
-    if len(ser) < 2:
-        return '<p class="dempet">For få hentinger med median ennå — linja tegnes fra andre kjøring.</p>'
-    ys = [p[1] for p in ser]
-    y0, y1 = min(ys) * 0.97, max(ys) * 1.03
-    if y1 <= y0:
-        y1 = y0 + 1
-    sx = lambda i: m + i / (len(ser) - 1) * (bredde - 2 * m)          # noqa: E731
-    sy = lambda y: hoyde - m - (y - y0) / (y1 - y0) * (hoyde - 2 * m)  # noqa: E731
+def svg_historikk(kjoringer: list[dict], bredde: int = 720, hoyde: int = 300, m: int = 58) -> str:
+    """Prisutvikling over hele historikken: indeks (pris ved REF_KM), median, kvartilbånd,
+    og antall til salgs som flate nederst. Tidsaksen er ekte datoer, ikke kjøringsnummer."""
+    from datetime import date as _date
+    pts = []
+    for k in kjoringer:
+        try:
+            d = _date.fromisoformat(str(k["dato"])[:10])
+        except (TypeError, ValueError):
+            continue
+        pts.append((d, k))
+    if len(pts) < 2:
+        return '<p class="dempet">For få hentinger ennå — grafen tegnes fra andre kjøring.</p>'
+    d0, d1 = pts[0][0], pts[-1][0]
+    span = max((d1 - d0).days, 1)
+    verdier = [v for _, k in pts for v in (k.get("median"), k.get("p25"), k.get("p75"), k.get("indeks")) if v]
+    if not verdier:
+        return '<p class="dempet">Ingen priser i historikken ennå.</p>'
+    y0, y1 = min(verdier) * 0.96, max(verdier) * 1.04
+    topp, bunn = 28, 70                     # plass til tittel øverst og tilbudsflate nederst
+    sx = lambda d: m + (d - d0).days / span * (bredde - 2 * m)                       # noqa: E731
+    sy = lambda y: hoyde - bunn - (y - y0) / (y1 - y0) * (hoyde - bunn - topp)       # noqa: E731
     grid = ""
-    for i in range(3):
-        yv = y0 + (y1 - y0) * i / 2
-        grid += (f'<line x1="{m}" y1="{sy(yv):.0f}" x2="{bredde-m}" y2="{sy(yv):.0f}" '
-                 f'stroke="var(--border)" stroke-width="1"/>'
-                 f'<text x="{m-8}" y="{sy(yv)+4:.0f}" text-anchor="end" '
-                 f'fill="var(--muted-foreground)" font-size="11">{_esc(kr(int(yv)))}</text>')
-    linje = " ".join(f"{sx(i):.0f},{sy(p[1]):.0f}" for i, p in enumerate(ser))
-    punkter = "".join(
-        f'<circle cx="{sx(i):.0f}" cy="{sy(p[1]):.0f}" r="3.5" fill="var(--accent)" opacity=".8">'
-        f'<title>{_esc(str(p[0]))} — {_esc(kr(p[1]))}</title></circle>' for i, p in enumerate(ser))
-    return (f'<svg viewBox="0 0 {bredde} {hoyde}" style="width:100%;height:auto">{grid}'
-            f'<polyline points="{linje}" fill="none" stroke="var(--accent)" stroke-width="1.5"/>{punkter}'
-            f'<text x="{m}" y="{hoyde-6}" fill="var(--muted-foreground)" font-size="11">'
-            f'{_esc(str(ser[0][0])[:10])}</text>'
-            f'<text x="{bredde-m}" y="{hoyde-6}" text-anchor="end" fill="var(--muted-foreground)" '
-            f'font-size="11">{_esc(str(ser[-1][0])[:10])}</text>'
-            f'<text x="12" y="18" fill="var(--muted-foreground)" font-size="12">'
-            f'Median utropspris per henting</text></svg>')
+    for i in range(4):
+        yv = y0 + (y1 - y0) * i / 3
+        grid += (f'<line x1="{m}" y1="{sy(yv):.0f}" x2="{bredde-m}" y2="{sy(yv):.0f}" stroke="var(--kant)"/>'
+                 f'<text x="{m-8}" y="{sy(yv)+4:.0f}" text-anchor="end" fill="var(--dempet)" font-size="11">'
+                 f'{_esc(kr(int(yv)))}</text>')
+    # månedsmerker
+    mnd = ""
+    d = _date(d0.year, d0.month, 1)
+    while d <= d1:
+        if d >= d0:
+            x = sx(d)
+            mnd += (f'<line x1="{x:.0f}" y1="{topp}" x2="{x:.0f}" y2="{hoyde-bunn}" stroke="var(--kant)" '
+                    f'stroke-dasharray="2 4"/><text x="{x+3:.0f}" y="{hoyde-bunn+14}" fill="var(--dempet)" '
+                    f'font-size="10">{d.strftime("%b %y")}</text>')
+        d = _date(d.year + (d.month == 12), d.month % 12 + 1, 1)
+    # kvartilbånd
+    baand = [(dd, k["p25"], k["p75"]) for dd, k in pts if k.get("p25") and k.get("p75")]
+    band = ""
+    if len(baand) >= 2:
+        opp = " ".join(f"{sx(dd):.0f},{sy(p75):.0f}" for dd, _, p75 in baand)
+        ned = " ".join(f"{sx(dd):.0f},{sy(p25):.0f}" for dd, p25, _ in reversed(baand))
+        band = f'<polygon points="{opp} {ned}" fill="var(--aksent)" opacity=".10"/>'
+    # tilbud (antall til salgs) som flate nederst, egen skala
+    tilb = [(dd, k["aktive"]) for dd, k in pts if k.get("aktive") is not None]
+    tilbud = ""
+    if len(tilb) >= 2:
+        mx = max(a for _, a in tilb) or 1
+        sa = lambda a: hoyde - 24 - a / mx * (bunn - 40)                                 # noqa: E731
+        flate = " ".join(f"{sx(dd):.0f},{sa(a):.0f}" for dd, a in tilb)
+        tilbud = (f'<polygon points="{sx(tilb[0][0]):.0f},{hoyde-24} {flate} {sx(tilb[-1][0]):.0f},{hoyde-24}" '
+                  f'fill="var(--dempet)" opacity=".18"/>'
+                  f'<text x="{bredde-m}" y="{hoyde-28}" text-anchor="end" fill="var(--dempet)" font-size="10">'
+                  f'til salgs: {tilb[-1][1]} (maks {mx})</text>')
+
+    def linje(felt: str, farge: str, bredde_px: str, dash: str = "") -> str:
+        ser = [(dd, k[felt]) for dd, k in pts if k.get(felt)]
+        if len(ser) < 2:
+            return ""
+        pt = " ".join(f"{sx(dd):.0f},{sy(v):.0f}" for dd, v in ser)
+        prikker = "".join(f'<circle cx="{sx(dd):.0f}" cy="{sy(v):.0f}" r="2.5" fill="{farge}">'
+                          f'<title>{_esc(str(dd))} — {felt}: {_esc(kr(v))}</title></circle>' for dd, v in ser)
+        return (f'<polyline points="{pt}" fill="none" stroke="{farge}" stroke-width="{bredde_px}"'
+                f'{f" stroke-dasharray={chr(34)}{dash}{chr(34)}" if dash else ""}/>' + prikker)
+    median = linje("median", "var(--dempet)", "1.5", "5 3")
+    indeks = linje("indeks", "var(--aksent)", "2.5")
+    ref = next((k.get("ref_km") for _, k in reversed(pts) if k.get("ref_km")), None)
+    tittel = (f'<text x="12" y="18" fill="var(--tekst)" font-size="12" font-weight="600">Prisutvikling</text>'
+              f'<text x="118" y="18" fill="var(--aksent)" font-size="11">— indeks{f" (pris ved {kr(ref)} km)" if ref else ""}</text>'
+              f'<text x="{300 if ref else 190}" y="18" fill="var(--dempet)" font-size="11">- - median · bånd = 25–75 %</text>')
+    return (f'<svg viewBox="0 0 {bredde} {hoyde}" style="width:100%;height:auto">{grid}{mnd}{band}{tilbud}'
+            f'{median}{indeks}{tittel}</svg>')
 
 
 def _t(a: dict) -> str:

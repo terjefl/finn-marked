@@ -21,6 +21,10 @@ og hvert søk navngir sin **kilde**. Nye plattformer legges til som en adapter i
 * **Kjenner igjen samme bil** på understellsnummer/reg.nr: legges en bil ut på nytt
   med ny annonse, logges det som «lagt ut på nytt» med forrige pris, ikke som ny.
   Har markedet ditt reg.nr, varsles «Din bil ligger ute» når den dukker opp.
+* **Prisindeks over tid**: per henting lagres regresjonens pris ved 60 000 km, så
+  utviklingen ikke farges av at bilene i markedet eldes. Grafen viser hele historikken
+  med indeks, median, kvartilbånd og antall til salgs; en månedstabell viser nye,
+  solgte, tilbud og hvor stor andel av tilbudet som ble solgt (salgstakt).
 * **Verdikurve** per marked: regresjon på utropspriser mot kilometerstand, med
   spredning. Sammenlignbare innen ±10 000 km vises ved siden av, fordi det tallet
   er lettere å forholde seg til enn en linje.

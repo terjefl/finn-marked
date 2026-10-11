@@ -62,6 +62,15 @@ MIGRERINGER: list[tuple[int, list[str]]] = [
         "CREATE INDEX IF NOT EXISTS idx_annonser_vin ON annonser(slug, vin)",
         "CREATE INDEX IF NOT EXISTS idx_annonser_regnr ON annonser(slug, regnr)",
     ]),
+    # Prisindeks per henting: regresjonens estimat ved fast kilometerstand, så utviklingen
+    # over tid ikke farges av at bilene i markedet blir eldre. Pluss strøm inn/ut per dag.
+    (5, [
+        "ALTER TABLE kjøringer ADD COLUMN indeks INTEGER",
+        "ALTER TABLE kjøringer ADD COLUMN ref_km INTEGER",
+        "ALTER TABLE kjøringer ADD COLUMN r2 REAL",
+        "ALTER TABLE kjøringer ADD COLUMN nye INTEGER",
+        "ALTER TABLE kjøringer ADD COLUMN solgte INTEGER",
+    ]),
 ]
 
 SKJEMA = """

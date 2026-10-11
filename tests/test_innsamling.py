@@ -141,6 +141,19 @@ def hoved() -> int:
         r = innsamling.hent_vakt(con, v)
         sjekk("normal avviksmengde: ingen advarsel", r["advarsler"], [])
 
+        # 7b) Prisindeks i kjøringer: fem annonser med km og pris gir regresjon og indeks ved REF_KM
+        from app import analyse
+        _FEED["annonser"] = [dict(annonse(str(100 + i), pris=300000 - i * 20000), km=20000 + i * 20000) for i in range(5)]
+        _FEED["treff"] = 5
+        innsamling.hent_vakt(con, v)
+        rad = con.execute("SELECT indeks, ref_km, r2, nye, solgte FROM kjøringer ORDER BY rowid DESC LIMIT 1").fetchone()
+        sjekk("indeks ved REF_KM (lineært: 300000 - (60000-20000)*1 kr/km)", (rad["indeks"], rad["ref_km"]), (260000, analyse.REF_KM))
+        sjekk("r2 og strøm", (round(rad["r2"], 2), rad["nye"], rad["solgte"]), (1.0, 5, 0))
+        sjekk("historikk tar alle rader", len(analyse.historikk(con, "test")) >= 7, True)
+        mnd = analyse.maanedsoversikt(con, "test")
+        sjekk("månedsoversikt: har rad for denne måneden", any(r["indeks"] == 260000 for r in mnd), True)
+        sjekk("svg_historikk tegner indeks", "indeks" in analyse.svg_historikk(analyse.historikk(con, "test")), True)
+
         # 8) Samme bil lagt ut på nytt (nytt kilde_id, samme understellsnummer) → «igjen», ikke «ny»
         _FEED["annonser"] = [annonse("1", pris=190000, ekstra={"vin": "VIN123", "regnr": "AB12345", "lagt_ut": "2026-09-01"})]
         _FEED["treff"] = 1

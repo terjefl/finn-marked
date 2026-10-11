@@ -168,7 +168,8 @@ def _vakt_kontekst(con, slug: str, b: dict) -> dict:
         "kurve": analyse.verdikurve(annonser, v.get("egen_km")),
         "botter": analyse.km_botter(annonser),
         "nabolag": analyse.nabolag(annonser, v["egen_km"]) if v.get("egen_km") else None,
-        "kjoringer": analyse.historikk(con, slug, dager=180),
+        "kjoringer": analyse.historikk(con, slug),
+        "maaneder": analyse.maanedsoversikt(con, slug),
         "hendelser": db.ok(con, "SELECT * FROM hendelser WHERE slug=? ORDER BY id DESC LIMIT 60", (slug,)),
         "liggetid": analyse.liggetid(solgte),
         "egen_ute": _egen_ute(con, v, annonser + solgte),
@@ -337,9 +338,12 @@ def api_forhandsvis(url: str, b: dict = Depends(bruker)):
 # ⚠️ Rekkefølge: /vakt/ny MÅ stå før /vakt/{slug}, ellers fanger {slug} ordet «ny».
 @app.get("/vakt/{slug}", response_class=HTMLResponse)
 def vakt_side(request: Request, slug: str, kategori: str | None = None, q: str | None = None,
-              con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+              aar: str | None = None, con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     k = _vakt_kontekst(con, slug, b)
     annonser = k["annonser"]
+    aarstall = sorted({a["aar"] for a in annonser if a.get("aar")}, reverse=True)
+    if aar and aar.isdigit():
+        annonser = [a for a in annonser if a.get("aar") == int(aar)]
     if kategori:
         annonser = [a for a in annonser if kategori.lower() in (a["tagger"] or "").lower()]
     if q:
@@ -360,6 +364,8 @@ def vakt_side(request: Request, slug: str, kategori: str | None = None, q: str |
         "historikk_svg": analyse.svg_historikk(k["kjoringer"]),
         "kategori": valgt,
         "kategorier": alle_kategorier,
+        "aar": aar if (aar and aar.isdigit()) else "",
+        "aarstall": aarstall,
         "q": q or "",
         "kjorer": _kjorer.get(slug),
         "kjorer_aktiv": innsamling.er_opptatt(slug),

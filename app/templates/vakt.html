@@ -138,14 +138,24 @@
 {% else %}<p class="dempet">Ingen registrerte endringer ennå — de dukker opp når neste henting finner noe nytt.</p>{% endif %}
 
 <h2>Til salgs ({{ annonser | length }})</h2>
+{% if aarstall | length > 1 %}
 <div class="filtre">
-  <a href="/vakt/{{ v.slug }}" class="{{ 'aktiv' if kategori == 'alle' }}">alle</a>
+  <span class="dempet" style="align-self:center">Årsmodell:</span>
+  <a href="/vakt/{{ v.slug }}?kategori={{ kategori if kategori != 'alle' }}" class="{{ 'aktiv' if not aar }}">alle</a>
+  {% for y in aarstall %}
+    <a href="/vakt/{{ v.slug }}?aar={{ y }}&kategori={{ kategori if kategori != 'alle' }}" class="{{ 'aktiv' if aar == y|string }}">{{ y }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+<div class="filtre">
+  <a href="/vakt/{{ v.slug }}?aar={{ aar }}" class="{{ 'aktiv' if kategori == 'alle' }}">alle</a>
   {% for k in kategorier %}
-    <a href="/vakt/{{ v.slug }}?kategori={{ k | urlencode }}" class="{{ 'aktiv' if kategori == k }}">{{ k }}</a>
+    <a href="/vakt/{{ v.slug }}?kategori={{ k | urlencode }}&aar={{ aar }}" class="{{ 'aktiv' if kategori == k }}">{{ k }}</a>
   {% endfor %}
 </div>
 <form method="get" action="/vakt/{{ v.slug }}" style="margin-bottom:12px; display:flex; gap:8px">
   <input type="hidden" name="kategori" value="{{ kategori if kategori != 'alle' }}">
+  <input type="hidden" name="aar" value="{{ aar }}">
   <input type="text" name="q" value="{{ q }}" placeholder="fritekst i tittel (f.eks. hengerfeste, laser, soltak)">
   <button class="lett">Filtrer</button>
 </form>
@@ -186,14 +196,39 @@
 <p class="dempet">Liggetiden måles fra annonsen ble lagt ut på FINN; for annonser uten den datoen fra første observasjon i basen.</p>
 {% endif %}
 
-<h2>Hentingshistorikk</h2>
-{{ historikk_svg | safe }}
+<h2>Prisutvikling</h2>
+<div class="kort">
+  {{ historikk_svg | safe }}
+  <p class="dempet" style="margin:8px 0 0">Indeksen er regresjonens pris ved fast kilometerstand, så den ikke faller bare fordi
+    bilene i markedet blir eldre. Medianen er alle til salgs med utropspris. Flaten nederst er antall til salgs.
+    Grafen dekker hele historikken; filtrene over påvirker den ikke.</p>
+</div>
+
+{% if maaneder %}
+<h2>Salgstakt per måned</h2>
 <div class="tabell"><table>
-  <thead><tr><th>Dato</th><th>Treff</th><th>Med pris</th><th>Median</th><th class="skjul-m">Min</th><th class="skjul-m">Max</th></tr></thead>
+  <thead><tr><th>Måned</th><th>Nye</th><th>Solgte</th><th class="skjul-m">Borte</th><th>Til salgs (snitt)</th><th>Solgt av tilbudet</th><th>Indeks</th><th class="skjul-m">Median</th></tr></thead>
   <tbody>
-  {% for k in kjoringer | reverse %}
+  {% for r in maaneder | reverse %}
+    <tr><td class="dempet">{{ r.maaned }}</td><td>{{ r.nye }}</td><td>{{ r.solgte }}</td><td class="skjul-m">{{ r.borte }}</td>
+        <td>{{ r.tilbud if r.tilbud is not none else '–' }}</td>
+        <td>{% if r.omsetning is not none %}{{ r.omsetning }} %{% else %}–{% endif %}</td>
+        <td>{{ r.indeks | kr if r.indeks else '–' }}</td><td class="skjul-m">{{ r.median | kr if r.median else '–' }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+<p class="dempet">Høy andel solgt av tilbudet er selgers marked; stigende tilbud og lav andel solgt er kjøpers. Nye telles fra
+  annonsens utlagt-dato hos FINN (eldre annonser: fra vi først så dem).</p>
+{% endif %}
+
+<h2>Hentingshistorikk</h2>
+<div class="tabell"><table>
+  <thead><tr><th>Dato</th><th>Treff</th><th>Med pris</th><th>Median</th><th>Indeks</th><th class="skjul-m">Min</th><th class="skjul-m">Max</th></tr></thead>
+  <tbody>
+  {% for k in (kjoringer | reverse | list)[:60] %}
     <tr><td class="dempet">{{ k.dato }}</td><td>{{ k.treff }}</td><td>{{ k.aktive }}</td>
         <td>{{ k.median | kr }}</td>
+        <td>{{ k.indeks | kr if k.indeks else '–' }}</td>
         <td class="skjul-m">{{ k['min'] | kr }}</td>
         <td class="skjul-m">{{ k['max'] | kr }}</td></tr>
   {% endfor %}
