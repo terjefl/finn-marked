@@ -33,34 +33,15 @@ if [ -z "$STACK_ID" ]; then
   exit 0
 fi
 
-echo "== ber Portainer redeploye stack $STACK_ID"
-python3 - "$STACK_ID" <<'PY'
-import os, sys, urllib.request, pathlib
-
-# API-nøkkelen leses fra ~/.hermes/config.yaml. MERK: nøkkelen inneholder
-# base64-tegn (+ / =), så den leses som «alt etter første kolon» på linjen —
-# aldri med et regex som begrenser tegnsettet (det kutter verdien ved første +).
-# Miljøvariabelen PORTAINER_API_KEY går foran hvis den er satt.
-stack_id = sys.argv[1]
-api = os.environ.get("PORTAINER_API_KEY", "")
-base = "http://10.11.12.16:9000"
-cfg_sti = pathlib.Path.home() / ".hermes/config.yaml"
-if not api and cfg_sti.exists():
-    linjer = cfg_sti.read_text(encoding="utf-8").splitlines()
-    for n, l in enumerate(linjer):
-        if "X-Portainer-API-Key" in l:
-            api = l.split(":", 1)[1].strip().strip('"').strip("'")
-            # leter etter url i portainer-blokken over
-            for j in range(n, max(0, n - 15), -1):
-                if "url:" in linjer[j] and "portainer" not in linjer[j].split("url:")[-1]:
-                    base = linjer[j].split("url:", 1)[1].strip().strip('"').strip("'").rstrip("/")
-                    break
-            break
-if not api:
-    sys.exit("  fant ikke Portainer-API-nøkkelen (sett PORTAINER_API_KEY)")
-req = urllib.request.Request(f"{base}/api/stacks/{stack_id}/git/redeploy?endpointId=2",
-                            method="POST", data=b'{"Prune": false}',
-                            headers={"X-API-Key": api, "Content-Type": "application/json"})
-with urllib.request.urlopen(req, timeout=120) as r:
-    print("  redeploy:", r.status)
-PY
+echo "== redeploy"
+# Portainer 2.45 har ikke lenger et brukbart REST-endepunkt for «pull and
+# redeploy» (POST /api/stacks/<id>/git/redeploy svarer 405, webhook-ruten 404).
+# Redeploy derfor via Portainer-verktøyet (MCP) eller UI-et. Har stacken en
+# webhook, kan den brukes i stedet: sett PORTAINER_WEBHOOK til webhook-URL-en.
+if [ -n "${PORTAINER_WEBHOOK:-}" ]; then
+  echo "  kaller webhook"
+  curl -fsS -m 120 -X POST "$PORTAINER_WEBHOOK" && echo "  webhook OK"
+else
+  echo "  stack $STACK_ID er oppdatert på verten — kjør «Pull and redeploy» i Portainer"
+  echo "  (eller sett PORTAINER_WEBHOOK=<url> for automatisk redeploy)."
+fi

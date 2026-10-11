@@ -128,11 +128,22 @@ class AuksjonenKilde:
     navn = "auksjonen"
 
     def hent(self, sok: dict, logg=lambda m: None) -> tuple[list[dict], int]:
-        kategori = str(sok.get("category1") or "1000")
-        q = sok.get("q")
-        sortering = sok.get("orderBy") or "endTime"
-        retning = "true" if str(sok.get("asc", "true")).lower() != "false" else "false"
-        maks = int(sok.get("maks") or 200)
+        # Søket kan oppgis som en ferdig auksjonen.no-URL (samme mønster som FINN-søket
+        # i UI-et) — da leser vi parametrene ut av query-strengen. Eksplisitte felt i
+        # søkeobjektet går foran.
+        parametre: dict[str, str] = {}
+        if sok.get("url"):
+            qs = urllib.parse.urlparse(sok["url"]).query
+            parametre = {k: v[0] for k, v in urllib.parse.parse_qs(qs).items()}
+
+        def verdi(navn: str, standard: str | None = None):
+            return sok.get(navn) or parametre.get(navn) or standard
+
+        kategori = str(verdi("category1", "1000"))
+        q = verdi("q")
+        sortering = verdi("orderBy", "endTime")
+        retning = "false" if str(verdi("asc", "true")).lower() == "false" else "true"
+        maks = int(verdi("maks", "200") or 200)
         annonser: dict[str, dict] = {}
         totalt = 0
         frm = 1

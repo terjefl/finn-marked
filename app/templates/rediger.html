@@ -14,13 +14,17 @@
     <label for="slug">Kortnavn (brukes i URL og API — bokstaver, tall og bindestrek)</label>
     <input type="text" id="slug" name="slug" required value="{{ v.slug if v else '' }}" placeholder="bmw-i4-2022">
 
-    <label for="sok">Søk — én linje per søk: <code>tag | url</code> (tag kan utelates)</label>
+    <label for="sok">Søk — én linje per søk: <code>[kilde:][tag] | url</code> (tag og kilde kan utelates)</label>
     <textarea id="sok" name="sok" required placeholder="alle | https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&registration_class=1&wheel_drive=2
-fully | https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&registration_class=1&wheel_drive=2&q=fully">{{ sok_tekst }}</textarea>
+fully | https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&registration_class=1&wheel_drive=2&q=fully
+auksjon | https://www.auksjonen.no/api/category-search/search?category1=1000&q=i4">{{ sok_tekst }}</textarea>
     <p class="dempet">
-      «tag» merkes på annonsene og brukes til å kategorisere dem (en annonse som dukker opp i
-      flere søk får begge taggene). Kilder som støttes nå: <code>finn</code> (standard).
-      Legg til <code>auksjonen |</code> foran når den kilden er tatt i bruk.
+      Kilden utledes av URL-en (<code>finn.no</code> → FINN, <code>auksjonen.no</code> → Auksjonen).
+      Vil du overstyre, skriv <code>kilde:tag</code> foran, f.eks. <code>auksjonen:auksjon</code>.
+      Taggen merkes på annonsene og brukes til kategorisering.
+      Auksjonsobjekter hentes fra <code>/api/category-search/search?category1=1000</code>
+      (kategori 1000 = Bil), og prisen deres lagres som <em>bud</em> — ikke utropspris —
+      så de holdes utenfor verdikurven.
     </p>
 
     <label for="kategorier">Kategorier — én per linje som <code>nokkel = visningsnavn</code></label>

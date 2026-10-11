@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import urllib.parse
 from datetime import date
 from pathlib import Path
 
@@ -204,19 +205,34 @@ def rediger(request: Request, slug: str):
         con.close()
 
 
+def _kilde_fra_url(url: str) -> str:
+    """Kilden utledes av vertsnavnet — da slipper brukeren å huske kildenavnet,
+    og en limt inn søke-URL fra auksjonen.no treffer riktig adapter."""
+    vert = urllib.parse.urlparse(url).netloc.lower()
+    if "auksjonen.no" in vert:
+        return "auksjonen"
+    return "finn"
+
+
 def _parse_sok(tekst: str) -> list[dict]:
-    """Ett søk per linje: `tag | url` eller bare url (tag blir «alle»)."""
+    """Ett søk per linje, på formen `[kilde:][tag] | <url>` (tag kan utelates).
+
+    Kilden utledes av URL-en når den ikke står eksplisitt; skriv `auksjonen:auksjon`
+    bare hvis du vil overstyre.
+    """
     ut = []
     for linje in (tekst or "").splitlines():
         linje = linje.strip()
         if not linje or linje.startswith("#"):
             continue
-        if "|" in linje:
-            tag, url = [d.strip() for d in linje.split("|", 1)]
-        else:
-            tag, url = "alle", linje
-        if url.startswith("http"):
-            ut.append({"tag": tag or "alle", "url": url})
+        merke, url = ([d.strip() for d in linje.split("|", 1)] if "|" in linje else ("", linje))
+        if not url.startswith("http"):
+            continue
+        kilde, tag = None, merke or None
+        if merke and ":" in merke:
+            kilde, tag = [d.strip() for d in merke.split(":", 1)]
+        kilde = kilde or _kilde_fra_url(url)
+        ut.append({"kilde": kilde, "tag": tag or ("alle" if kilde == "finn" else kilde), "url": url})
     return ut
 
 

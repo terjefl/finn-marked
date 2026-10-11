@@ -67,6 +67,17 @@ def sjekk(navn: str, faktisk, ventet) -> None:
 
 
 def main() -> int:
+    # Søke-parsingen: kilden skal utledes av URL-en, og taggen kan settes eksplisitt.
+    from app.web import _parse_sok
+    sok = _parse_sok("alle | https://www.finn.no/mobility/search/car?q=x\n"
+                     "auksjon | https://www.auksjonen.no/api/category-search/search?category1=1000&q=i4\n"
+                     "auksjonen:auksjon2 | https://www.auksjonen.no/x")
+    sjekk("finn-søk kilde", sok[0]["kilde"], "finn")
+    sjekk("finn-søk tag", sok[0]["tag"], "alle")
+    sjekk("auksjonen utledet av URL", sok[1]["kilde"], "auksjonen")
+    sjekk("auksjonen tag", sok[1]["tag"], "auksjon")
+    sjekk("eksplisitt kilde:tag", (sok[2]["kilde"], sok[2]["tag"]), ("auksjonen", "auksjon2"))
+
     a = parse_kort(KORT_VANLIG)
     sjekk("pris", a["pris"], 434532)
     sjekk("km", a["km"], 47926)
