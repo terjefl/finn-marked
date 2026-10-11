@@ -13,6 +13,7 @@
     <div>
       <a class="navn" style="font-size:17px" href="/vakt/{{ r.v.slug }}">{{ r.v.navn }}</a>
       {% if not r.v.aktiv %}<span class="pill">av</span>{% endif %}
+      {% if r.eier %}<span class="pill">{{ r.eier }}</span>{% endif %}
       {% if r.v.egen_bil %}<div class="dempet">{{ r.v.egen_bil }}{% if r.v.egen_km %} · {{ "{:,}".format(r.v.egen_km).replace(",", " ") }} km{% endif %}</div>{% endif %}
     </div>
     <div class="dempet">

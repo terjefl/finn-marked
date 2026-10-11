@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block tittel %}Brukere — FINN-marked{% endblock %}
+{% block innhold %}
+<h1>Brukere</h1>
+{% if lenke %}
+<div class="kort" style="border-color:var(--aksent)">
+  <strong>Invitasjonslenke til {{ lenke_til }}</strong> — gyldig i 7 dager, kan brukes én gang.
+  <div style="display:flex; gap:8px; margin-top:8px">
+    <input type="text" id="lenke" value="{{ lenke }}" readonly onclick="this.select()">
+    <button class="lett" onclick="navigator.clipboard.writeText(document.getElementById('lenke').value); this.textContent='Kopiert'">Kopier</button>
+  </div>
+  <p class="dempet">Send lenken til brukeren. Den åpner en side der hen lager sin egen passkey.</p>
+</div>
+{% endif %}
+
+<div class="kort">
+  <table>
+    <thead><tr><th>Navn</th><th>Rolle</th><th>Passkeys</th><th>Vakter</th><th>Sist innlogget</th><th></th></tr></thead>
+    <tbody>
+    {% for b in brukere %}
+      <tr{% if not b.aktiv %} class="dempet"{% endif %}>
+        <td>{{ b.navn }}{% if b.epost %} <span class="dempet">{{ b.epost }}</span>{% endif %}
+            {% if not b.aktiv %}<span class="pill">deaktivert</span>{% endif %}</td>
+        <td>{{ b.rolle }}</td>
+        <td>{{ b.passkeys }}</td>
+        <td>{{ b.vakter }}</td>
+        <td class="dempet">{{ b.sist_innlogget or '–' }}</td>
+        <td style="white-space:nowrap">
+          <form class="inline" method="post" action="/admin/brukere/{{ b.id }}/inviter"><button class="lett liten">Ny invitasjon</button></form>
+          <a href="/vakt/ny?eier={{ b.id }}"><button class="lett liten" type="button">Lag vakt</button></a>
+          {% if b.id != bruker.id %}
+          <form class="inline" method="post" action="/admin/brukere/{{ b.id }}/aktiv">
+            <input type="hidden" name="aktiv" value="{{ 0 if b.aktiv else 1 }}">
+            <button class="{{ 'fare' if b.aktiv else 'lett' }} liten">{{ 'Deaktiver' if b.aktiv else 'Aktiver' }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="kort">
+  <h2 style="margin-top:0">Inviter ny bruker</h2>
+  <form method="post" action="/admin/brukere/ny">
+    <div class="rutenett">
+      <div><label for="navn" style="margin-top:0">Navn</label><input type="text" id="navn" name="navn" required placeholder="Kari"></div>
+      <div><label for="epost" style="margin-top:0">E-post (valgfritt, bare til din egen oversikt)</label><input type="text" id="epost" name="epost"></div>
+      <div><label for="rolle" style="margin-top:0">Rolle</label>
+        <select id="rolle" name="rolle"><option value="bruker">bruker</option><option value="admin">admin</option></select></div>
+    </div>
+    <button style="margin-top:12px">Opprett og lag invitasjonslenke</button>
+  </form>
+  <p class="dempet">Brukeren får ikke e-post fra tjenesten — du sender lenken selv. Vil du ha vakten klar
+    før hen logger inn, trykk «Lag vakt» på raden etterpå.</p>
+</div>
+{% endblock %}

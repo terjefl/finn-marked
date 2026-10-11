@@ -28,7 +28,27 @@ SKJEMA_BASELINE = 1
 
 #: Nummererte migreringer: (versjon, [SQL …]). Eksempel:
 #:     (2, ["ALTER TABLE annonser ADD COLUMN farge TEXT"]),
-MIGRERINGER: list[tuple[int, list[str]]] = []
+MIGRERINGER: list[tuple[int, list[str]]] = [
+    # Flerbrukerstøtte: brukere, passkeys, sesjoner, invitasjoner og eier på vakten.
+    (2, [
+        """CREATE TABLE IF NOT EXISTS brukere (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             handle TEXT NOT NULL,           -- WebAuthn user.id (tilfeldig, ikke løpenummeret)
+             navn TEXT NOT NULL, epost TEXT, rolle TEXT NOT NULL DEFAULT 'bruker',
+             aktiv INTEGER NOT NULL DEFAULT 1, opprettet TEXT, sist_innlogget TEXT)""",
+        """CREATE TABLE IF NOT EXISTS passkeys (
+             id TEXT PRIMARY KEY,            -- credential id, base64url
+             bruker_id INTEGER NOT NULL, public_key BLOB NOT NULL, sign_count INTEGER NOT NULL DEFAULT 0,
+             transports TEXT, navn TEXT, opprettet TEXT, sist_brukt TEXT)""",
+        """CREATE TABLE IF NOT EXISTS sesjoner (
+             id TEXT PRIMARY KEY, bruker_id INTEGER NOT NULL, opprettet TEXT, utloper TEXT, brukeragent TEXT)""",
+        """CREATE TABLE IF NOT EXISTS invitasjoner (
+             token TEXT PRIMARY KEY, bruker_id INTEGER NOT NULL, opprettet TEXT, utloper TEXT, brukt TEXT)""",
+        "CREATE INDEX IF NOT EXISTS idx_passkeys_bruker ON passkeys(bruker_id)",
+        "CREATE INDEX IF NOT EXISTS idx_sesjoner_bruker ON sesjoner(bruker_id)",
+        "ALTER TABLE vakter ADD COLUMN eier INTEGER",   # NULL til første admin er opprettet
+    ]),
+]
 
 SKJEMA = """
 CREATE TABLE IF NOT EXISTS vakter (
@@ -182,13 +202,19 @@ def slett_gammelt(con: sqlite3.Connection, dager: int = 365) -> None:
                (f"-{dager} days",))
 
 
-def vakter(con: sqlite3.Connection, kun_aktive: bool = False) -> list[dict]:
-    """Alle vakter med sok/kategorier ferdig parset (samme form som vakt())."""
-    sql = "SELECT * FROM vakter"
+def vakter(con: sqlite3.Connection, kun_aktive: bool = False, eier: int | None = None) -> list[dict]:
+    """Alle vakter med sok/kategorier ferdig parset (samme form som vakt()).
+
+    `eier` avgrenser til én brukers vakter; uten den kommer alle (admin, scheduler)."""
+    vilkaar, args = [], []
     if kun_aktive:
-        sql += " WHERE aktiv=1"
+        vilkaar.append("aktiv=1")
+    if eier is not None:
+        vilkaar.append("eier=?")
+        args.append(eier)
+    sql = "SELECT * FROM vakter" + (" WHERE " + " AND ".join(vilkaar) if vilkaar else "")
     ut = []
-    for r in con.execute(sql + " ORDER BY navn"):
+    for r in con.execute(sql + " ORDER BY navn", args):
         v = dict(r)
         v["sok"] = json.loads(v.get("sok") or "[]")
         v["kategorier"] = json.loads(v.get("kategorier") or "{}")
@@ -209,13 +235,14 @@ def vakt(con: sqlite3.Connection, slug: str) -> dict | None:
 def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
     con.execute(
         """INSERT INTO vakter (slug, navn, sok, kategorier, egen_bil, egen_km, hentetime, aktiv,
-                               opprettet, sist_hentet, sist_status)
+                               opprettet, sist_hentet, sist_status, eier)
            VALUES (:slug, :navn, :sok, :kategorier, :egen_bil, :egen_km, :hentetime, :aktiv,
-                   COALESCE(:opprettet, :naa), :sist_hentet, :sist_status)
+                   COALESCE(:opprettet, :naa), :sist_hentet, :sist_status, :eier)
            ON CONFLICT(slug) DO UPDATE SET
              navn=excluded.navn, sok=excluded.sok, kategorier=excluded.kategorier,
              egen_bil=excluded.egen_bil, egen_km=excluded.egen_km,
-             hentetime=excluded.hentetime, aktiv=excluded.aktiv""",
+             hentetime=excluded.hentetime, aktiv=excluded.aktiv,
+             eier=COALESCE(excluded.eier, vakter.eier)""",
         {
             "slug": v["slug"], "navn": v["navn"],
             "sok": json.dumps(v.get("sok") or [], ensure_ascii=False),
@@ -223,7 +250,7 @@ def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
             "egen_bil": v.get("egen_bil"), "egen_km": v.get("egen_km"),
             "hentetime": int(v.get("hentetime") or 7), "aktiv": int(v.get("aktiv", 1)),
             "opprettet": v.get("opprettet"), "sist_hentet": v.get("sist_hentet"),
-            "sist_status": v.get("sist_status"), "naa": naa(),
+            "sist_status": v.get("sist_status"), "naa": naa(), "eier": v.get("eier"),
         },
     )
 

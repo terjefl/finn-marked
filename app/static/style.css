@@ -51,3 +51,9 @@ input[type=range] { flex:1; min-width:220px; accent-color:var(--aksent); }
 .filtre a { text-decoration:none; padding:4px 11px; border:1px solid var(--kant); border-radius:20px;
             color:var(--tekst); font-size:13px; }
 .filtre a.aktiv { background:var(--aksent); color:#fff; border-color:var(--aksent); }
+.kort.smal { max-width:460px; margin:40px auto; }
+.feil { color:var(--negativ); font-size:14px; min-height:1.2em; }
+.melding { color:var(--positiv); font-size:14px; }
+button.liten { padding:4px 10px; font-size:13px; font-weight:500; }
+select { padding:8px 10px; border:1px solid var(--kant); border-radius:7px; background:var(--bg); color:var(--tekst); font:inherit; }
+nav form.inline button { margin-left:16px; }

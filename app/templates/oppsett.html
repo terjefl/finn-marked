@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block tittel %}Oppsett — FINN-marked{% endblock %}
+{% block innhold %}
+<div class="kort smal">
+  {% if tom %}
+  <h1>Velkommen</h1>
+  <p class="dempet">Basen har ingen brukere ennå. Den første som registrerer en passkey blir administrator,
+    og vaktene som alt finnes blir hens.</p>
+  <label for="navn">Navnet ditt</label>
+  <input type="text" id="navn" placeholder="Terje" autocomplete="name">
+  {% else %}
+  <h1>Gjenoppretting</h1>
+  <p class="dempet">Oppsettsnøkkelen er gyldig. Velg hvilken administrator som skal få en ny passkey.</p>
+  <label for="admin">Administrator</label>
+  <select id="admin">{% for a in adminer %}<option value="{{ a.id }}">{{ a.navn }}</option>{% endfor %}</select>
+  {% endif %}
+  <label for="pknavn">Navn på passkeyen (valgfritt, f.eks. «Mac» eller «iPhone»)</label>
+  <input type="text" id="pknavn" placeholder="Mac">
+  <button id="knapp" style="width:100%; margin-top:14px">Lag passkey</button>
+  <p class="feil" id="feil"></p>
+</div>
+<script src="/static/passkey.js"></script>
+<script>
+passkey.knytt(document.getElementById('knapp'), () => passkey.registrer({
+  modus: 'oppsett',
+  navn: (document.getElementById('navn') || {}).value,
+  bruker_id: (document.getElementById('admin') || {}).value,
+  nokkel: {{ nokkel | tojson }},
+  passkey_navn: document.getElementById('pknavn').value,
+}), '/');
+</script>
+{% endblock %}

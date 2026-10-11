@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block tittel %}Konto — FINN-marked{% endblock %}
+{% block innhold %}
+<h1>{{ bruker.navn }} <span class="pill">{{ bruker.rolle }}</span></h1>
+{% if melding %}<p class="melding">{{ melding }}</p>{% endif %}
+
+<div class="kort">
+  <h2 style="margin-top:0">Passkeys</h2>
+  <table>
+    <thead><tr><th>Navn</th><th>Opprettet</th><th>Sist brukt</th><th></th></tr></thead>
+    <tbody>
+    {% for p in passkeys %}
+      <tr>
+        <td><form class="inline" method="post" action="/konto/passkey/{{ p.id }}/navn" style="display:flex; gap:6px">
+              <input type="text" name="navn" value="{{ p.navn or '' }}" style="max-width:200px">
+              <button class="lett liten">Lagre</button></form></td>
+        <td class="dempet">{{ p.opprettet }}</td>
+        <td class="dempet">{{ p.sist_brukt or '–' }}</td>
+        <td>{% if passkeys | length > 1 %}
+          <form class="inline" method="post" action="/konto/passkey/{{ p.id }}/slett"
+                onsubmit="return confirm('Slette denne passkeyen?')"><button class="fare liten">Slett</button></form>
+          {% else %}<span class="dempet">eneste passkey</span>{% endif %}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h3>Legg til passkey på denne enheten</h3>
+  <p class="dempet">Har du logget inn på en annen enhet, kan du lage en passkey her også — da slipper du
+    å gå via den andre neste gang.</p>
+  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:end">
+    <div style="flex:1; min-width:200px"><label for="pknavn" style="margin-top:0">Navn</label>
+      <input type="text" id="pknavn" placeholder="iPhone"></div>
+    <button id="knapp">Lag passkey</button>
+  </div>
+  <p class="feil" id="feil"></p>
+</div>
+<script src="/static/passkey.js"></script>
+<script>
+passkey.knytt(document.getElementById('knapp'), () => passkey.registrer({
+  modus: 'konto', passkey_navn: document.getElementById('pknavn').value,
+}), '/konto?melding=Passkey+lagt+til');
+</script>
+{% endblock %}

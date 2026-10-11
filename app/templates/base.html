@@ -11,8 +11,13 @@
 <header>
   <a class="logo" href="/">FINN-marked</a>
   <nav>
-    <a href="/">Oversikt</a>
-    <a href="/vakt/ny">Ny vakt</a>
+    {% if bruker %}
+      <a href="/">Oversikt</a>
+      <a href="/vakt/ny">Ny vakt</a>
+      {% if bruker.rolle == 'admin' %}<a href="/admin/brukere">Brukere</a>{% endif %}
+      <a href="/konto">{{ bruker.navn }}</a>
+      <form class="inline" method="post" action="/loggut"><button class="lett liten">Logg ut</button></form>
+    {% endif %}
   </nav>
 </header>
 <main>

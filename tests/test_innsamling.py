@@ -65,7 +65,8 @@ def hoved() -> int:
         db.init()
         con = db.base()
         sjekk("migrering: skjemaversjon satt ved oppstart",
-              con.execute("PRAGMA user_version").fetchone()[0], db.SKJEMA_BASELINE)
+              con.execute("PRAGMA user_version").fetchone()[0],
+              max([db.SKJEMA_BASELINE] + [nr for nr, _ in db.MIGRERINGER]))
         v = {"slug": "test", "navn": "Test", "sok": [{"kilde": "falsk", "tag": "alle",
                                                      "url": "https://example.invalid/sok"}],
              "kategorier": {}, "egen_km": None}

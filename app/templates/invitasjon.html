@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block tittel %}Invitasjon — FINN-marked{% endblock %}
+{% block innhold %}
+<div class="kort smal">
+  {% if inv %}
+  <h1>Hei, {{ inv.navn }}</h1>
+  <p class="dempet">Du er invitert til FINN-marked. Lag en passkey på denne enheten, så er du inne —
+    uten passord. Du kan legge til flere enheter etterpå under «Konto».</p>
+  <label for="pknavn">Navn på passkeyen (valgfritt, f.eks. «iPhone»)</label>
+  <input type="text" id="pknavn" placeholder="iPhone">
+  <button id="knapp" style="width:100%; margin-top:14px">Lag passkey og logg inn</button>
+  <p class="feil" id="feil"></p>
+  {% else %}
+  <h1>Invitasjonen gjelder ikke lenger</h1>
+  <p class="dempet">Lenken er brukt, utløpt eller feil. Be den som inviterte deg om en ny.</p>
+  {% endif %}
+</div>
+{% if inv %}
+<script src="/static/passkey.js"></script>
+<script>
+passkey.knytt(document.getElementById('knapp'), () => passkey.registrer({
+  modus: 'invitasjon', token: {{ inv.token | tojson }},
+  passkey_navn: document.getElementById('pknavn').value,
+}), '/');
+</script>
+{% endif %}
+{% endblock %}
