@@ -25,6 +25,10 @@ og hvert søk navngir sin **kilde**. Nye plattformer legges til som en adapter i
   utviklingen ikke farges av at bilene i markedet eldes. Grafen viser hele historikken
   med indeks, median, kvartilbånd og antall til salgs; en månedstabell viser nye,
   solgte, tilbud og hvor stor andel av tilbudet som ble solgt (salgstakt).
+* **Formål per bil du følger**: *eier* gir verdiestimat, egen bil i markedet og
+  liggetid; *kjøper* gir kjøpskriterier (maks pris/km, årsmodell, kategorier som må
+  være med) og en kandidatliste sortert etter avvik fra forventet pris for
+  kilometerstanden, med liggetid og prisnivå siste 30 dager.
 * **Verdikurve** per marked: regresjon på utropspriser mot kilometerstand, med
   spredning. Sammenlignbare innen ±10 000 km vises ved siden av, fordi det tallet
   er lettere å forholde seg til enn en linje.

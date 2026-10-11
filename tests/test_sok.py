@@ -59,6 +59,20 @@ def hoved() -> int:
     sjekk("oppsummer holder dem utenfor", (analyse.oppsummer(biler)["min"], analyse.oppsummer(biler)["antall_urimelig"]), (450000, 2))
     sjekk("verdikurve regner uten dem", analyse.verdikurve(biler)["n"], 5)
     sjekk("få annonser: bare gulvet gjelder", analyse.urimelige(biler[:3] + [biler[5]]), {"5"})
+    biler2 = [{"kilde_id": "a", "pris": 400000, "km": 40000, "aar": 2022, "pris_type": "utropspris", "tagger": "Fully Charged", "forst_sett": "2026-09-01"},
+              {"kilde_id": "b", "pris": 470000, "km": 60000, "aar": 2022, "pris_type": "utropspris", "tagger": "", "forst_sett": "2026-10-09"},
+              {"kilde_id": "c", "pris": 350000, "km": 90000, "aar": 2021, "pris_type": "utropspris", "tagger": "Fully Charged", "forst_sett": "2026-10-01"},
+              {"kilde_id": "d", "pris": 300000, "km": 120000, "aar": 2021, "pris_type": "utropspris", "tagger": "", "forst_sett": "2026-10-01"},
+              {"kilde_id": "e", "pris": 500000, "km": 20000, "aar": 2023, "pris_type": "utropspris", "tagger": "", "forst_sett": "2026-10-01"}]
+    kurve = analyse.verdikurve(biler2)
+    liste = analyse.kjoperliste(biler2, kurve, {}, i_dag="2026-10-11")
+    sjekk("kjøperliste: alle, sortert etter avvik", [r["kilde_id"] for r in liste][:2], ["a", "c"])
+    sjekk("kjøperliste: avvik regnet", liste[0]["avvik"] < 0 and liste[0]["forventet"] > liste[0]["pris"], True)
+    sjekk("kjøperliste: ligget", [r["ligget"] for r in liste if r["kilde_id"] == "a"], [40])
+    sjekk("kjøperliste: kriterier", [r["kilde_id"] for r in analyse.kjoperliste(biler2, kurve, {"maks_pris": 400000, "maks_km": 100000, "aar_fra": 2022, "kategorier": ["Fully Charged"]})], ["a"])
+    sjekk("indeks_trend", analyse.indeks_trend([{"dato": "2026-09-01 07:00:00", "indeks": 480000}, {"dato": "2026-09-20 07:00:00", "indeks": 470000},
+                                                 {"dato": "2026-10-11 07:00:00", "indeks": 460000}], 30),
+          {"naa": 460000, "foer": 480000, "diff": -20000, "pct": -4.2, "dager": 40})
     from app.kilder import finn
     sjekk("undermodeller: X5 under X-Serie",
           finn.finn_merke_og_modell("BMW", "X5", [{"navn": "BMW", "kode": "0.749", "param": "variant", "modeller": [

@@ -18,6 +18,7 @@
   </div>
 </div>
 <div class="dempet" style="margin-bottom:12px">
+  <span class="pill {{ 'v0' if v.formaal == 'kjoper' else 'v1' }}">{{ 'kjøper' if v.formaal == 'kjoper' else 'eier' }}</span>
   {{ v.sok | length }} søk:
   {% for s in v.sok %}<span class="pill">{{ s.get('kilde', 'finn') }}: {{ s.tag }}</span>{% endfor %}
   {% if v.sist_hentet %}<br>Sist hentet {{ v.sist_hentet }}{% if kjorer %}: <em>{{ kjorer }}</em>{% endif %}{% endif %}
@@ -36,6 +37,54 @@
   <div class="kort"><div class="dempet">Solgt (registrert)</div><div class="nokkel">{{ solgte | length }}</div>
        <div class="dempet">{% if liggetid %}median liggetid {{ liggetid.median | round | int }} dager ({{ liggetid.min }}–{{ liggetid.max }}){% else %}FINN markerer solgte annonser i søket{% endif %}</div></div>
 </div>
+
+{% if v.formaal == 'kjoper' %}
+<div class="kort" style="border-left:4px solid var(--positiv)">
+  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:baseline">
+    <h2 style="margin:0">Kandidater{% if v.kriterier %} som oppfyller kriteriene{% endif %} ({{ kjoperliste | length }})</h2>
+    <div class="dempet">
+      {% if v.kriterier.maks_pris %}≤ {{ v.kriterier.maks_pris | kr }} kr · {% endif %}
+      {% if v.kriterier.maks_km %}≤ {{ v.kriterier.maks_km | kr }} km · {% endif %}
+      {% if v.kriterier.aar_fra or v.kriterier.aar_til %}{{ v.kriterier.aar_fra or '' }}–{{ v.kriterier.aar_til or '' }} · {% endif %}
+      {% for k in v.kriterier.kategorier or [] %}{{ k }} · {% endfor %}
+      <a href="/vakt/{{ v.slug }}/rediger">endre</a>
+    </div>
+  </div>
+  <div class="rutenett" style="margin:12px 0">
+    <div><div class="dempet">Prisnivå siste 30 dager</div>
+      <div class="estimat">{% if indeks_trend %}{{ '+' if indeks_trend.diff > 0 }}{{ indeks_trend.pct }} %{% else %}–{% endif %}</div>
+      <div class="dempet">{% if indeks_trend %}indeks {{ indeks_trend.naa | kr }} mot {{ indeks_trend.foer | kr }} for {{ indeks_trend.dager }} dager siden{% else %}kommer etter noen hentinger{% endif %}</div></div>
+    <div><div class="dempet">Beste avvik fra forventet pris</div>
+      <div class="estimat">{% if kjoperliste and kjoperliste[0].avvik is not none %}{{ kjoperliste[0].avvik | kr }} kr{% else %}–{% endif %}</div>
+      <div class="dempet">negativt = billigere enn linja tilsier for kilometerstanden</div></div>
+    <div><div class="dempet">Nye kandidater siste 7 dager</div>
+      <div class="estimat">{{ kjoperliste | selectattr('ligget', 'ne', none) | selectattr('ligget', 'le', 7) | list | length }}</div>
+      <div class="dempet">{{ kjoperliste | selectattr('ligget', 'ne', none) | selectattr('ligget', 'ge', 30) | list | length }} har ligget over 30 dager</div></div>
+  </div>
+  {% if kjoperliste %}
+  <div class="tabell"><table>
+    <thead><tr><th>Pris</th><th>Avvik</th><th>Km</th><th class="skjul-m">År</th><th>Annonse</th><th>Ligget</th><th class="skjul-m">Sted</th></tr></thead>
+    <tbody>
+    {% for a in kjoperliste[:25] %}
+      <tr>
+        <td class="tall">{{ a.pris | kr }}</td>
+        <td class="tall" style="color:{{ 'var(--positiv)' if a.avvik is not none and a.avvik < 0 else 'var(--dempet)' }}">{% if a.avvik is not none %}{{ '+' if a.avvik > 0 }}{{ a.avvik | kr }} <span class="dempet">({{ a.avvik_pct }} %)</span>{% else %}–{% endif %}</td>
+        <td class="tall">{{ a.km | kr }}</td>
+        <td class="skjul-m">{{ a.aar or '–' }}</td>
+        <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or '' }}</a>
+            <span class="bare-m dempet"><br>{{ a.aar or '' }}{% if a.sted %} · {{ a.sted }}{% endif %}</span></td>
+        <td class="dempet">{% if a.ligget is not none %}{{ a.ligget }} d{% else %}–{% endif %}</td>
+        <td class="skjul-m">{{ a.sted or '–' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% if kjoperliste | length > 25 %}<p class="dempet">Viser de 25 beste av {{ kjoperliste | length }}.</p>{% endif %}
+  {% else %}
+  <p class="dempet">Ingen annonser oppfyller kriteriene akkurat nå. Lang liggetid gir forhandlingsrom; stigende tilbud og fallende indeks er kjøpers marked.</p>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if egen_ute %}
 <div class="kort" style="border-color:var(--advarsel)">
@@ -70,7 +119,7 @@
 <div class="kort">
   <h2 style="margin-top:0">Pris mot kilometerstand</h2>
   <div class="slider">
-    <label for="km" style="margin:0">Din kilometerstand:</label>
+    <label for="km" style="margin:0">{{ 'Ønsket kilometerstand:' if v.formaal == 'kjoper' else 'Din kilometerstand:' }}</label>
     <input type="range" id="km" min="{{ kurve.serie | map(attribute=0) | min }}" max="{{ kurve.serie | map(attribute=0) | max }}"
            step="1000" value="{{ kurve.egen_km or 60000 }}">
     <span class="dempet" id="kmvis">{{ kurve.egen_km or 60000 }} km</span>

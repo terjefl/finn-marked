@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block tittel %}{{ 'Rediger marked' if v else 'Følg marked' }} — FINN-marked{% endblock %}
+{% block tittel %}{{ 'Rediger' if v else 'Følg bil' }} — FINN-marked{% endblock %}
 {% block innhold %}
 <h1>{% if kopi %}Følg samme bil som «{{ kopi.navn }}»{% elif v %}Rediger{% else %}Følg en ny bil{% endif %}</h1>
 {% if kopi %}<p class="dempet">Søk, kategorier og hentetid er kopiert. Fyll inn eierens bil og kilometerstand,
@@ -88,7 +88,38 @@
   </div>
 
   <div class="kort">
-    <h2 style="margin-top:0">Egen bil og henting</h2>
+    <h2 style="margin-top:0">Formål</h2>
+    <div class="filtre" id="formaal">
+      <label class="valg"><input type="radio" name="formaal" value="eier" {{ 'checked' if skjema.formaal == 'eier' }}>
+        <strong>Jeg eier bilen</strong> <span class="dempet">— hva er den verdt, og når bør jeg selge</span></label>
+      <label class="valg"><input type="radio" name="formaal" value="kjoper" {{ 'checked' if skjema.formaal != 'eier' }}>
+        <strong>Jeg vil kjøpe</strong> <span class="dempet">— finn riktig bil til riktig pris</span></label>
+    </div>
+    <div id="kriterier" {% if skjema.formaal == 'eier' %}hidden{% endif %}>
+      <h3>Kjøpskriterier</h3>
+      <p class="dempet">Annonser som oppfyller dette listes på bil-siden, sortert etter hvor mye de ligger under
+        forventet pris for kilometerstanden. Tomt felt betyr ingen grense.</p>
+      <div class="rutenett skjema">
+        <div><label style="margin-top:0">Maks pris (kr)</label><input type="number" name="krit_maks_pris" value="{{ skjema.kriterier.maks_pris or '' }}" placeholder="450000"></div>
+        <div><label style="margin-top:0">Maks kilometerstand</label><input type="number" name="krit_maks_km" value="{{ skjema.kriterier.maks_km or '' }}" placeholder="60000"></div>
+        <div><label style="margin-top:0">Årsmodell fra</label><input type="number" name="krit_aar_fra" value="{{ skjema.kriterier.aar_fra or '' }}" placeholder="2021"></div>
+        <div><label style="margin-top:0">Årsmodell til</label><input type="number" name="krit_aar_til" value="{{ skjema.kriterier.aar_til or '' }}" placeholder="2024"></div>
+      </div>
+      {% if skjema.kategorier %}
+      <label>Må ha (kategorier)</label>
+      <div class="filtre">
+        {% for k, navn in skjema.kategorier.items() %}
+        <label class="valg"><input type="checkbox" name="krit_kat" value="{{ navn }}" {{ 'checked' if navn in (skjema.kriterier.kategorier or []) }}> {{ navn }}</label>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="dempet">Legg inn kategorier over, så kan du kreve dem her (f.eks. «Hengerfeste»).</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="kort" id="egen-bil-kort">
+    <h2 style="margin-top:0"><span id="egen-tittel">{{ 'Egen bil og henting' if skjema.formaal == 'eier' else 'Henting' }}</span></h2>
     <div class="rutenett skjema">
       <div><label for="regnr" style="margin-top:0">Registreringsnummer (valgfritt)</label>
         <div style="display:flex; gap:6px">
@@ -158,6 +189,17 @@
   document.getElementById('nytt-sok').addEventListener('click', () => nyRad('sok-mal', 'sok-rader').querySelector('.url').focus());
   document.getElementById('ny-kat').addEventListener('click', () => nyRad('kat-mal', 'kat-rader').querySelector('.navn').focus());
   if (!document.querySelector('.sok-rad')) nyRad('sok-mal', 'sok-rader');
+  // Formål styrer hvilke felt som vises
+  const krit = document.getElementById('kriterier'), egenFelt = ['regnr', 'egen_bil', 'egen_km'];
+  function visFormaal() {
+    const kj = document.querySelector('input[name=formaal]:checked').value === 'kjoper';
+    krit.hidden = !kj;
+    egenFelt.forEach(id => { const el = document.getElementById(id); if (el) el.closest('.rutenett > div').hidden = kj; });
+    document.getElementById('egen-tittel').textContent = kj ? 'Henting' : 'Egen bil og henting';
+  }
+  document.querySelectorAll('input[name=formaal]').forEach(r => r.addEventListener('change', visFormaal));
+  visFormaal();
+
   // Egen bil fra registreringsnummer
   const regnr = document.getElementById('regnr'), info = document.getElementById('kjoretoy-info');
   async function slaaOpp() {

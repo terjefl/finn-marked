@@ -176,3 +176,7 @@ td.tall { white-space:nowrap; }
   .hero svg { max-width:260px; }
 }
 .kort.bil { border-left:4px solid var(--aksent); }
+label.valg { display:inline-flex; align-items:center; gap:8px; margin:0; padding:8px 12px; border:1px solid var(--kant);
+             border-radius:10px; background:var(--kort); color:var(--tekst); font-size:14px; cursor:pointer; }
+label.valg:has(input:checked) { border-color:var(--aksent); background:var(--aksent-lys); }
+label.valg input { width:auto; margin:0; accent-color:var(--aksent); }

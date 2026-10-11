@@ -355,3 +355,68 @@ def dager_mellom(fra: str | None, til: str | None) -> int | None:
         return (_date.fromisoformat(til[:10]) - _date.fromisoformat(fra[:10])).days
     except (TypeError, ValueError):
         return None
+
+
+def kjoperliste(annonser: list[dict], kurve: dict | None, kriterier: dict | None,
+                i_dag: str | None = None) -> list[dict]:
+    """Kjøperens liste: annonser som oppfyller kriteriene, sortert etter hvor mye de ligger
+    under regresjonslinja (negativt avvik = billigere enn forventet for kilometerstanden).
+
+    kriterier: {maks_pris, maks_km, aar_fra, aar_til, kategorier: [visningsnavn …]}.
+    Hver rad får avvik (kr), avvik_pct og ligget (dager siden utlagt / først sett)."""
+    from datetime import date as _date
+    k = kriterier or {}
+    i_dag = i_dag or _date.today().isoformat()
+    ut = []
+    for a in brukbare(annonser):
+        if not a.get("pris") or not er_utropspris(a) or a.get("solgt"):
+            continue
+        if k.get("maks_pris") and a["pris"] > k["maks_pris"]:
+            continue
+        if k.get("maks_km") and (a.get("km") is None or a["km"] > k["maks_km"]):
+            continue
+        if k.get("aar_fra") and (not a.get("aar") or a["aar"] < k["aar_fra"]):
+            continue
+        if k.get("aar_til") and (not a.get("aar") or a["aar"] > k["aar_til"]):
+            continue
+        tagger = {t for t in (a.get("tagger") or "").split(",") if t}
+        if k.get("kategorier") and not set(k["kategorier"]).issubset(tagger):
+            continue
+        r = dict(a)
+        if kurve and a.get("km") is not None:
+            forventet = kurve["a"] + kurve["b"] * a["km"]
+            r["forventet"] = round(forventet)
+            r["avvik"] = round(a["pris"] - forventet)
+            r["avvik_pct"] = round((a["pris"] - forventet) / forventet * 100, 1) if forventet else None
+        else:
+            r["forventet"] = r["avvik"] = r["avvik_pct"] = None
+        r["ligget"] = dager_mellom(a.get("lagt_ut") or a.get("forst_sett"), i_dag)
+        ut.append(r)
+    ut.sort(key=lambda r: (r["avvik"] if r["avvik"] is not None else 10**9, r["pris"]))
+    return ut
+
+
+def indeks_trend(kjoringer: list[dict], dager: int = 30) -> dict | None:
+    """Indeksen nå mot for `dager` siden (nærmeste kjøring før): {naa, foer, diff, pct, dager}."""
+    from datetime import date as _date
+    from datetime import timedelta
+    med = [k for k in kjoringer if k.get("indeks")]
+    if len(med) < 2:
+        return None
+    naa = med[-1]
+    try:
+        grense = _date.fromisoformat(str(naa["dato"])[:10]) - timedelta(days=dager)
+    except ValueError:
+        return None
+    foer = next((k for k in reversed(med[:-1]) if _date.fromisoformat(str(k["dato"])[:10]) <= grense), None)
+    if not foer:
+        foer = med[0]
+    try:
+        faktiske_dager = (_date.fromisoformat(str(naa["dato"])[:10]) - _date.fromisoformat(str(foer["dato"])[:10])).days
+    except ValueError:
+        faktiske_dager = dager
+    if faktiske_dager <= 0:
+        return None
+    diff = naa["indeks"] - foer["indeks"]
+    return {"naa": naa["indeks"], "foer": foer["indeks"], "diff": diff,
+            "pct": round(diff / foer["indeks"] * 100, 1) if foer["indeks"] else None, "dager": faktiske_dager}

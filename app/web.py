@@ -172,6 +172,9 @@ def _vakt_kontekst(con, slug: str, b: dict) -> dict:
         "maaneder": analyse.maanedsoversikt(con, slug),
         "hendelser": db.ok(con, "SELECT * FROM hendelser WHERE slug=? ORDER BY id DESC LIMIT 60", (slug,)),
         "liggetid": analyse.liggetid(solgte),
+        "kjoperliste": analyse.kjoperliste(annonser, analyse.verdikurve(annonser), v.get("kriterier"))
+        if (v.get("formaal") or "eier") == "kjoper" else [],
+        "indeks_trend": analyse.indeks_trend(analyse.historikk(con, slug)),
         "egen_ute": _egen_ute(con, v, annonser + solgte),
         "urimelige": analyse.urimelige(annonser),
         "igjen": {r["kilde_id"] for r in con.execute(
@@ -236,6 +239,7 @@ def ny_vakt(request: Request, url: str | None = None, navn: str = "", slug: str 
     k = _skjema_kontekst(None)
     k["skjema"].update({"navn": navn, "slug": slug or sokmod.slugify(navn), "eier": valgt_eier,
                         "sok": [{"tag": "alle" if kilde == "finn" else kilde, "url": url, "kilde": kilde, "auto": True}]})
+    k["skjema"]["formaal"] = "eier" if regnr.strip() else "kjoper"
     if regnr.strip():
         # Fra «Ny vakt fra registreringsnummer»: bilen er alt slått opp i steg 1, vis den i skjemaet.
         k["skjema"]["regnr"] = regnr.strip().upper()
@@ -392,7 +396,7 @@ def _skjema_kontekst(v: dict | None) -> dict:
         return {"v": None, "kopi": None, "forslag": [], "brukere": [],
                 "skjema": {"navn": "", "slug": "", "eier": None, "sok": [], "kategorier": {},
                            "egen_bil": "", "egen_km": "", "regnr": "", "kjoretoy": None,
-                           "hentetime": 7, "aktiv": True}}
+                           "hentetime": 7, "aktiv": True, "formaal": "", "kriterier": {}}}
     sok = [{"tag": s.get("tag") or "", "url": s["url"], "kilde": s.get("kilde") or "finn",
             "auto": (s.get("kilde") or "finn") == sokmod.kilde_fra_url(s["url"])} for s in v["sok"]]
     return {"v": v, "kopi": None, "forslag": [], "brukere": [],
@@ -400,7 +404,8 @@ def _skjema_kontekst(v: dict | None) -> dict:
                        "kategorier": v.get("kategorier") or {}, "egen_bil": v.get("egen_bil") or "",
                        "egen_km": v.get("egen_km") or "", "regnr": v.get("regnr") or "",
                        "kjoretoy": v.get("kjoretoy"), "hentetime": v.get("hentetime") or 7,
-                       "aktiv": bool(v.get("aktiv"))}}
+                       "aktiv": bool(v.get("aktiv")), "formaal": v.get("formaal") or "",
+                       "kriterier": v.get("kriterier") or {}}}
 
 
 def _forslag(con, v: dict) -> list[tuple[str, int]]:
@@ -445,6 +450,8 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
           hentetime: int = Form(7), aktiv: str | None = Form(None), eier: str = Form(""),
           sok_tag: list[str] = Form([]), sok_url: list[str] = Form([]), sok_kilde: list[str] = Form([]),
           kat_navn: list[str] = Form([]), kat_nokkel: list[str] = Form([]), regnr: str = Form(""),
+          formaal: str = Form(""), krit_maks_pris: str = Form(""), krit_maks_km: str = Form(""),
+          krit_aar_fra: str = Form(""), krit_aar_til: str = Form(""), krit_kat: list[str] = Form([]),
           con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     """Skjemaet sender søk og kategorier som rader (sok_*/kat_*). De gamle tekstfeltene
     `sok`/`kategorier` godtas fortsatt, så eldre klienter og tester virker."""
@@ -472,9 +479,16 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
         kj = None
     if kj and not egen_bil.strip():
         egen_bil = kj["beskrivelse"]
+    tall = lambda x: int(x.strip().replace(" ", "")) if x.strip().replace(" ", "").isdigit() else None  # noqa: E731
+    kriterier = {k: v for k, v in {
+        "maks_pris": tall(krit_maks_pris), "maks_km": tall(krit_maks_km),
+        "aar_fra": tall(krit_aar_fra), "aar_til": tall(krit_aar_til),
+        "kategorier": [x for x in krit_kat if x.strip()] or None}.items() if v}
+    if formaal not in ("eier", "kjoper"):
+        formaal = "eier" if (regnr or egen_km.strip()) else "kjoper"
     db.lagre_vakt(con, {
         "slug": ren, "navn": navn.strip() or ren, "sok": nye_sok, "kategorier": nye_kat,
-        "regnr": regnr or None, "kjoretoy": kj,
+        "regnr": regnr or None, "kjoretoy": kj, "formaal": formaal, "kriterier": kriterier,
         "egen_bil": egen_bil or None, "egen_km": int(egen_km) if egen_km.strip().isdigit() else None,
         "hentetime": hentetime, "aktiv": 1 if aktiv else 0,
         "opprettet": eksisterende.get("opprettet") if eksisterende else None,

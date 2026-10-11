@@ -71,6 +71,11 @@ MIGRERINGER: list[tuple[int, list[str]]] = [
         "ALTER TABLE kjøringer ADD COLUMN nye INTEGER",
         "ALTER TABLE kjøringer ADD COLUMN solgte INTEGER",
     ]),
+    # Formål: «eier» (hva er min bil verdt) eller «kjoper» (finn riktig bil), med kjøpskriterier.
+    (6, [
+        "ALTER TABLE vakter ADD COLUMN formaal TEXT",
+        "ALTER TABLE vakter ADD COLUMN kriterier TEXT",   # JSON: {maks_pris, maks_km, aar_fra, aar_til, kategorier}
+    ]),
 ]
 
 SKJEMA = """
@@ -242,6 +247,7 @@ def vakter(con: sqlite3.Connection, kun_aktive: bool = False, eier: int | None =
         v["sok"] = json.loads(v.get("sok") or "[]")
         v["kategorier"] = json.loads(v.get("kategorier") or "{}")
         v["kjoretoy"] = json.loads(v.get("kjoretoy") or "null")
+        v["kriterier"] = json.loads(v.get("kriterier") or "{}")
         ut.append(v)
     return ut
 
@@ -254,21 +260,24 @@ def vakt(con: sqlite3.Connection, slug: str) -> dict | None:
     v["sok"] = json.loads(v["sok"] or "[]")
     v["kategorier"] = json.loads(v["kategorier"] or "{}")
     v["kjoretoy"] = json.loads(v.get("kjoretoy") or "null")
+    v["kriterier"] = json.loads(v.get("kriterier") or "{}")
     return v
 
 
 def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
     con.execute(
         """INSERT INTO vakter (slug, navn, sok, kategorier, egen_bil, egen_km, hentetime, aktiv,
-                               opprettet, sist_hentet, sist_status, eier, regnr, kjoretoy)
+                               opprettet, sist_hentet, sist_status, eier, regnr, kjoretoy, formaal, kriterier)
            VALUES (:slug, :navn, :sok, :kategorier, :egen_bil, :egen_km, :hentetime, :aktiv,
-                   COALESCE(:opprettet, :naa), :sist_hentet, :sist_status, :eier, :regnr, :kjoretoy)
+                   COALESCE(:opprettet, :naa), :sist_hentet, :sist_status, :eier, :regnr, :kjoretoy,
+                   :formaal, :kriterier)
            ON CONFLICT(slug) DO UPDATE SET
              navn=excluded.navn, sok=excluded.sok, kategorier=excluded.kategorier,
              egen_bil=excluded.egen_bil, egen_km=excluded.egen_km,
              hentetime=excluded.hentetime, aktiv=excluded.aktiv,
              eier=COALESCE(excluded.eier, vakter.eier),
-             regnr=excluded.regnr, kjoretoy=excluded.kjoretoy""",
+             regnr=excluded.regnr, kjoretoy=excluded.kjoretoy,
+             formaal=excluded.formaal, kriterier=excluded.kriterier""",
         {
             "slug": v["slug"], "navn": v["navn"],
             "sok": json.dumps(v.get("sok") or [], ensure_ascii=False),
@@ -279,6 +288,8 @@ def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
             "sist_status": v.get("sist_status"), "naa": naa(), "eier": v.get("eier"),
             "regnr": v.get("regnr") or None,
             "kjoretoy": json.dumps(v["kjoretoy"], ensure_ascii=False) if v.get("kjoretoy") else None,
+            "formaal": v.get("formaal") or ("eier" if (v.get("regnr") or v.get("egen_km")) else "kjoper"),
+            "kriterier": json.dumps(v["kriterier"], ensure_ascii=False) if v.get("kriterier") else None,
         },
     )
 
