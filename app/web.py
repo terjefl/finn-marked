@@ -11,7 +11,6 @@ API:    /api/vakter, /api/vakt/<slug>, /api/vakt/<slug>/endringer?since=ISO
 from __future__ import annotations
 
 import json
-import os
 import threading
 import urllib.parse
 from datetime import date
@@ -59,6 +58,9 @@ def _hent_bakgrunn(slug: str, detaljer: bool = False) -> None:
         except Exception as e:  # noqa: BLE001 – feilen skal vises i UI-et, ikke drepe tråden
             _logg_til(slug)(f"FEIL: {e}")
             try:
+                # Ikke committ halvferdige annonser/hendelser fra den avbrutte hentingen:
+                # rull tilbake til forrige commit før statusen skrives.
+                con.rollback()
                 con.execute("UPDATE vakter SET sist_status=? WHERE slug=?", (f"FEIL: {e}", slug))
                 con.commit()
             except Exception:  # noqa: BLE001
@@ -320,17 +322,22 @@ def api_vakt(slug: str):
 
 @app.get("/api/vakt/{slug}/endringer")
 def api_endringer(slug: str, since: str | None = None, limit: int = 100):
-    """Endringsstrøm for varsling (Hermes-vakten leser denne)."""
+    """Endringsstrøm for varsling (Hermes-vakten leser denne).
+
+    `since` tåler både basens format (`2026-10-11 13:52:11`) og ISO med «T»
+    (`2026-10-11T13:52:11`); det normaliseres før sammenligningen — den er tekstlig.
+    """
     con = db.base()
     try:
-        if since:
+        siden = db.normaliser_tid(since)
+        if siden:
             rader = db.ok(con, "SELECT * FROM hendelser WHERE slug=? AND tid >= ? ORDER BY id LIMIT ?",
-                          (slug, since, limit))
+                          (slug, siden, limit))
         else:
             rader = db.ok(con, "SELECT * FROM hendelser WHERE slug=? ORDER BY id DESC LIMIT ?", (slug, limit))
         for r in rader:
             r["detaljer"] = json.loads(r["detaljer"] or "{}")
-        return {"slug": slug, "since": since, "antall": len(rader), "hendelser": rader}
+        return {"slug": slug, "since": siden, "antall": len(rader), "hendelser": rader}
     finally:
         con.close()
 
