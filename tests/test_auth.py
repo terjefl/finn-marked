@@ -149,12 +149,16 @@ def hoved() -> int:
                 vk = db.vakt(con, "bmw-i4-2022")
                 sjekk("formål og kriterier lagret", (vk["formaal"], vk["kriterier"]),
                       ("kjoper", {"maks_pris": 450000, "maks_km": 60000, "aar_fra": 2022, "kategorier": ["Fully Charged"]}))
-                sjekk("varsling lagret (ukjent type filtrert)", vk["varsling"], {"aktiv": True, "typer": ["kandidat"]})
+                sjekk("varsling lagret (ukjent type filtrert, kanaler på)", vk["varsling"],
+                      {"aktiv": True, "typer": ["kandidat"], "kanaler": {"epost": True, "pushover": True}})
             r = c.post("/konto/varsling", data={"epost": "terje@x.no", "pushover": "uABC", "varsel_epost": "1"})
             sjekk("konto: varsling lagret", r.status_code, 303)
             with db.aapen() as con:
                 u = auth.bruker(con, admin["id"])
-                sjekk("konto: kanaler", (u["epost"], u["pushover"], u["varsel_epost"]), ("terje@x.no", "uABC", 1))
+                sjekk("konto: kanaler (pushover globalt av når boksen mangler)",
+                      (u["epost"], u["pushover"], u["varsel_epost"], u["varsel_pushover"]), ("terje@x.no", "uABC", 1, 0))
+            sjekk("skjema viser kanalstatus (tjeneren uten Pushover-token)",
+                  "Pushover er ikke satt opp på tjeneren" in c.get("/vakt/gammel/rediger").text, True)
             sjekk("konto: test uten SMTP gir feilmelding",
                   "Test+feilet" in c.post("/konto/varsling/test", data={"kanal": "epost"}).headers["location"]
                   or "Test%20feilet" in c.post("/konto/varsling/test", data={"kanal": "epost"}).headers["location"], True)

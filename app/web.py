@@ -224,14 +224,26 @@ def forside(request: Request, con: sqlite3.Connection = Depends(kon), b: dict = 
     return templates.TemplateResponse(request, "forside.html", {"oversikt": oversikt})
 
 
-def _kanaler(con, b: dict) -> list[str]:
-    """Hvor varslene går for den innloggede: til bruk i skjemaets forklaring."""
+def _kanaler(con, b: dict) -> dict:
+    """Kanalstatus for den innloggede, til skjemaets kanalvalg: per kanal {klar: bool, tekst: str}."""
     u = auth.bruker(con, b["id"]) or {}
-    ut = []
-    if u.get("epost") and u.get("varsel_epost", 1) and varsling.smtp_oppsett():
-        ut.append(f"e-post ({u['epost']})")
-    if u.get("pushover") and varsling.pushover_token():
-        ut.append("Pushover")
+    ut = {}
+    if not varsling.smtp_oppsett():
+        ut["epost"] = {"klar": False, "tekst": "e-post er ikke satt opp på tjeneren"}
+    elif not u.get("epost"):
+        ut["epost"] = {"klar": False, "tekst": "ingen e-postadresse på kontoen"}
+    elif not u.get("varsel_epost", 1):
+        ut["epost"] = {"klar": False, "tekst": "e-post er skrudd av på kontoen"}
+    else:
+        ut["epost"] = {"klar": True, "tekst": u["epost"]}
+    if not varsling.pushover_token():
+        ut["pushover"] = {"klar": False, "tekst": "Pushover er ikke satt opp på tjeneren"}
+    elif not u.get("pushover"):
+        ut["pushover"] = {"klar": False, "tekst": "ingen Pushover-nøkkel på kontoen"}
+    elif not u.get("varsel_pushover", 1):
+        ut["pushover"] = {"klar": False, "tekst": "Pushover er skrudd av på kontoen"}
+    else:
+        ut["pushover"] = {"klar": True, "tekst": "Pushover"}
     return ut
 
 
@@ -415,7 +427,7 @@ def _skjema_kontekst(v: dict | None) -> dict:
                 "skjema": {"navn": "", "slug": "", "eier": None, "sok": [], "kategorier": {},
                            "egen_bil": "", "egen_km": "", "regnr": "", "kjoretoy": None,
                            "hentetime": 7, "aktiv": True, "formaal": "", "kriterier": {},
-                           "varsling": {"aktiv": False, "typer": []}}}
+                           "varsling": {"aktiv": False, "typer": [], "kanaler": {"epost": True, "pushover": True}}}}
     sok = [{"tag": s.get("tag") or "", "url": s["url"], "kilde": s.get("kilde") or "finn",
             "auto": (s.get("kilde") or "finn") == sokmod.kilde_fra_url(s["url"])} for s in v["sok"]]
     return {"v": v, "kopi": None, "forslag": [], "brukere": [], "varsel_typer": varsling.TYPER,
@@ -474,7 +486,7 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
           kat_navn: list[str] = Form([]), kat_nokkel: list[str] = Form([]), regnr: str = Form(""),
           formaal: str = Form(""), krit_maks_pris: str = Form(""), krit_maks_km: str = Form(""),
           krit_aar_fra: str = Form(""), krit_aar_til: str = Form(""), krit_kat: list[str] = Form([]),
-          varsle: str | None = Form(None), varsel_typer: list[str] = Form([]),
+          varsle: str | None = Form(None), varsel_typer: list[str] = Form([]), varsel_kanaler: list[str] = Form(None),
           con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     """Skjemaet sender søk og kategorier som rader (sok_*/kat_*). De gamle tekstfeltene
     `sok`/`kategorier` godtas fortsatt, så eldre klienter og tester virker."""
@@ -512,7 +524,10 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
     db.lagre_vakt(con, {
         "slug": ren, "navn": navn.strip() or ren, "sok": nye_sok, "kategorier": nye_kat,
         "regnr": regnr or None, "kjoretoy": kj, "formaal": formaal, "kriterier": kriterier,
-        "varsling": {"aktiv": bool(gyldige_typer := [t for t in varsel_typer if t in varsling.TYPER]), "typer": gyldige_typer},
+        "varsling": {"aktiv": bool(gyldige_typer := [t for t in varsel_typer if t in varsling.TYPER]), "typer": gyldige_typer,
+                     # Kanal-boksene sendes bare når skjemaet har dem; uten dem beholdes «alle på».
+                     "kanaler": ({c: (c in varsel_kanaler) for c in varsling.KANALER} if varsel_kanaler is not None
+                                 else {c: True for c in varsling.KANALER})},
         "egen_bil": egen_bil or None, "egen_km": int(egen_km) if egen_km.strip().isdigit() else None,
         "hentetime": hentetime, "aktiv": 1 if aktiv else 0,
         "opprettet": eksisterende.get("opprettet") if eksisterende else None,
@@ -668,9 +683,11 @@ def konto(request: Request, melding: str | None = None, con: sqlite3.Connection 
 
 @app.post("/konto/varsling")
 def konto_varsling(epost: str = Form(""), pushover: str = Form(""), varsel_epost: str | None = Form(None),
+                   varsel_pushover: str | None = Form(None),
                    con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
-    con.execute("UPDATE brukere SET epost=?, pushover=?, varsel_epost=? WHERE id=?",
-                (epost.strip() or None, pushover.strip() or None, 1 if varsel_epost else 0, b["id"]))
+    con.execute("UPDATE brukere SET epost=?, pushover=?, varsel_epost=?, varsel_pushover=? WHERE id=?",
+                (epost.strip() or None, pushover.strip() or None, 1 if varsel_epost else 0,
+                 1 if varsel_pushover else 0, b["id"]))
     con.commit()
     return RedirectResponse("/konto?melding=Varsling+lagret", status_code=303)
 

@@ -101,8 +101,12 @@ def send_pushover(brukernokkel: str, tittel: str, tekst: str, lenke: str | None 
 
 # ------------------------------------------------------------------ utvalg og melding
 
+KANALER = ("epost", "pushover")
+
+
 def varsling_for(v: dict) -> dict:
-    """{aktiv: bool, typer: [...]} for vakten, med standardvalg etter formål."""
+    """{aktiv, typer, kanaler: {epost, pushover}} for vakten. Kanalene er på som standard;
+    de kan skrus av per bil her, og globalt på kontoen (varsel_epost / varsel_pushover)."""
     o = v.get("varsling") or {}
     if isinstance(o, str):
         try:
@@ -110,10 +114,23 @@ def varsling_for(v: dict) -> dict:
         except ValueError:
             o = {}
     formaal = v.get("formaal") or "eier"
+    k = o.get("kanaler") or {}
+    kanaler = {c: bool(k.get(c, True)) for c in KANALER}
     if "typer" in o:                                   # lagret eksplisitt: det brukeren krysset av
         typer = list(o.get("typer") or [])
-        return {"aktiv": bool(typer), "typer": typer}
-    return {"aktiv": False, "typer": list(STANDARD.get(formaal, []))}   # aldri lagret: forslag, men av
+        return {"aktiv": bool(typer), "typer": typer, "kanaler": kanaler}
+    return {"aktiv": False, "typer": list(STANDARD.get(formaal, [])), "kanaler": kanaler}
+
+
+def kanaler_for(eier: dict, v: dict) -> dict:
+    """Hvilke kanaler et varsel for denne bilen faktisk går til: kontoens globale valg
+    (og at kanalen er satt opp) OG bilens valg. {epost: adresse|None, pushover: nøkkel|None}."""
+    valg = varsling_for(v)["kanaler"]
+    epost = eier.get("epost") if (eier.get("epost") and eier.get("varsel_epost", 1) and valg["epost"]
+                                  and smtp_oppsett()) else None
+    push = eier.get("pushover") if (eier.get("pushover") and eier.get("varsel_pushover", 1) and valg["pushover"]
+                                    and pushover_token()) else None
+    return {"epost": epost, "pushover": push}
 
 
 def plukk_hendelser(con, v: dict, fra_id: int) -> list[dict]:
@@ -181,22 +198,26 @@ def etter_henting(con, v: dict, fra_id: int) -> str | None:
     hendelser = plukk_hendelser(con, v, fra_id)
     if not hendelser:
         return None
-    eier = con.execute("SELECT * FROM brukere WHERE id=?", (v.get("eier"),)).fetchone()
-    if not eier:
+    rad = con.execute("SELECT * FROM brukere WHERE id=?", (v.get("eier"),)).fetchone()
+    if not rad:
+        return None
+    eier = dict(rad)
+    til = kanaler_for(eier, v)
+    if not til["epost"] and not til["pushover"]:
         return None
     emne, ren, htm = bygg_melding(v, hendelser)
     lenke = f"{base_url()}/vakt/{v['slug']}" if base_url() else None
     status = []
-    if eier["epost"] and (eier["varsel_epost"] if "varsel_epost" in eier.keys() else 1):
+    if til["epost"]:
         try:
-            send_epost(eier["epost"], emne, ren, htm)
+            send_epost(til["epost"], emne, ren, htm)
             status.append("e-post")
         except Exception as e:  # noqa: BLE001 – varsling skal aldri velte hentingen
-            logg.warning("e-post til %s feilet: %s", eier["epost"], e)
+            logg.warning("e-post til %s feilet: %s", til["epost"], e)
             status.append(f"e-post feilet ({e})")
-    if eier["pushover"] if "pushover" in eier.keys() else None:
+    if til["pushover"]:
         try:
-            send_pushover(eier["pushover"], emne, "\n".join(h["tekst"] for h in hendelser[:8]), lenke)
+            send_pushover(til["pushover"], emne, "\n".join(h["tekst"] for h in hendelser[:8]), lenke)
             status.append("pushover")
         except Exception as e:  # noqa: BLE001
             logg.warning("pushover til bruker %s feilet: %s", eier["id"], e)

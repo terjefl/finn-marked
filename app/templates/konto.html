@@ -6,8 +6,8 @@
 
 <div class="kort">
   <h2 style="margin-top:0">Varsling</h2>
-  <p class="dempet">Hva du varsles om velger du på hver bil du følger («Rediger» → Varsling). Her velger du kanalene.
-    Ett varsel per henting, bare når noe har skjedd.</p>
+  <p class="dempet">Dette er kanalene dine, og bryterne her gjelder alle bilene du følger. På hver bil («Rediger» → Varsling)
+    velger du hva du varsles om, og kan skru av en kanal for akkurat den bilen. Ett varsel per henting, bare når noe har skjedd.</p>
   <form method="post" action="/konto/varsling">
     <div class="rutenett skjema">
       <div><label style="margin-top:0">E-postadresse</label>
@@ -16,6 +16,7 @@
         {% if not epost_oppsatt %}<div class="dempet" style="margin-top:6px">E-postutsending er ikke satt opp på tjeneren ennå (admin: FINN_SMTP_*).</div>{% endif %}</div>
       <div><label style="margin-top:0">Pushover-brukernøkkel (valgfritt)</label>
         <input type="text" name="pushover" value="{{ konto.pushover or '' }}" placeholder="u…" autocomplete="off">
+        <label class="valg" style="margin-top:8px"><input type="checkbox" name="varsel_pushover" value="1" {{ 'checked' if konto.varsel_pushover is not defined or konto.varsel_pushover }}> Send varsler til Pushover</label>
         <div class="dempet" style="margin-top:6px">Fra Pushover-appen. Varsler sendes dit i tillegg til e-post.
           {% if not pushover_oppsatt %}Ikke satt opp på tjeneren ennå (admin: FINN_PUSHOVER_TOKEN).{% endif %}</div></div>
     </div>

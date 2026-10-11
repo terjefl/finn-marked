@@ -185,7 +185,11 @@ def hoved() -> int:
               con.execute("SELECT COUNT(*) c FROM hendelser WHERE slug='egen' AND type='egen'").fetchone()["c"], 1)
 
         # 10) Varsling: plukk hendelser etter kriterier og send via stubbede kanaler
+        import os as _os
+
         from app import varsling
+        _os.environ["FINN_SMTP_HOST"] = "smtp.test"          # kanalene regnes som satt opp (senderne stubbes)
+        _os.environ["FINN_PUSHOVER_TOKEN"] = "app-token"
         sendt: list = []
         varsling.send_epost = lambda til, emne, tekst, html=None: sendt.append(("epost", til, emne))
         varsling.send_pushover = lambda nokkel, tittel, tekst, lenke=None: sendt.append(("pushover", nokkel, tittel))
@@ -211,8 +215,26 @@ def hoved() -> int:
         innsamling.hent_vakt(con, v_k)
         sjekk("varsling: ingenting nytt → ingen melding", (varsling.etter_henting(con, db.vakt(con, "kjop"), fra), sendt), (None, []))
         sjekk("varsling: av → ingen plukk", varsling.plukk_hendelser(con, dict(v_k, varsling={"typer": []}), 0), [])
-        sjekk("varsling: aldri lagret → forslag, men av", varsling.varsling_for({"formaal": "eier"}), {"aktiv": False, "typer": ["egen", "solgt"]})
+        sjekk("varsling: aldri lagret → forslag, men av", varsling.varsling_for({"formaal": "eier"}),
+              {"aktiv": False, "typer": ["egen", "solgt"], "kanaler": {"epost": True, "pushover": True}})
         sjekk("varsling: lagret med typer → på", varsling.varsling_for({"varsling": {"typer": ["ny"]}})["aktiv"], True)
+        # Kanaler: av per bil, og av globalt på kontoen
+        sendt.clear()
+        v_k2 = dict(v_k, varsling={"typer": ["kandidat", "pris"], "kanaler": {"epost": False, "pushover": True}})
+        db.lagre_vakt(con, v_k2)
+        _FEED["annonser"] = _FEED["annonser"] + [dict(annonse("399", pris=150000), km=10000)]
+        _FEED["treff"] = 7
+        fra = varsling.siste_hendelse_id(con, "kjop")
+        innsamling.hent_vakt(con, v_k2)
+        varsling.etter_henting(con, db.vakt(con, "kjop"), fra)
+        sjekk("kanal av per bil: bare pushover", [k for k, *_ in sendt], ["pushover"])
+        sendt.clear()
+        con.execute("UPDATE brukere SET varsel_pushover=0 WHERE id=?", (bid,))
+        _FEED["annonser"] = _FEED["annonser"] + [dict(annonse("398", pris=140000), km=12000)]
+        _FEED["treff"] = 8
+        fra = varsling.siste_hendelse_id(con, "kjop")
+        innsamling.hent_vakt(con, v_k2)
+        sjekk("globalt av på kontoen: ingenting sendes", (varsling.etter_henting(con, db.vakt(con, "kjop"), fra), sendt), (None, []))
 
         con.close()
     finally:

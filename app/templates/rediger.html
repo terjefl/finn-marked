@@ -121,15 +121,23 @@
   <div class="kort">
     <h2 style="margin-top:0">Varsling</h2>
     <p>Bilen hentes fra FINN én gang i døgnet, klokka <strong id="hentetime-vis">{{ skjema.hentetime }}</strong>, og når du trykker
-      «Oppdater nå». Etter hver henting får du <strong>ett varsel</strong>
-      {% if kanaler %}til <strong>{{ kanaler | join(' og ') }}</strong>{% else %}<span style="color:var(--negativ)">— men du har ingen kanal ennå: legg inn e-post under «Konto»</span>{% endif %}
-      hvis noe av dette har skjedd siden sist:</p>
+      «Oppdater nå». Etter hver henting får du <strong>ett varsel</strong> hvis noe av dette har skjedd siden sist:</p>
     <div class="filtre" style="margin-top:4px">
       {% for t, navn in varsel_typer.items() %}
       <label class="valg" title="{{ varsel_forklaring[t] }}"><input type="checkbox" name="varsel_typer" value="{{ t }}" {{ 'checked' if t in skjema.varsling.typer }}> {{ navn }}</label>
       {% endfor %}
     </div>
-    <p class="dempet" style="margin-top:8px">Ingen avkryssing = ingen varsler. Skjer det ingenting, sendes ingenting.
+    <p style="margin:12px 0 4px">Send varslene for denne bilen til:</p>
+    <div class="filtre">
+      <label class="valg" {% if not kanaler.epost.klar %}style="opacity:.6"{% endif %}>
+        <input type="checkbox" name="varsel_kanaler" value="epost" {{ 'checked' if skjema.varsling.kanaler.epost }}>
+        E-post <span class="dempet">({{ kanaler.epost.tekst }})</span></label>
+      <label class="valg" {% if not kanaler.pushover.klar %}style="opacity:.6"{% endif %}>
+        <input type="checkbox" name="varsel_kanaler" value="pushover" {{ 'checked' if skjema.varsling.kanaler.pushover }}>
+        Pushover <span class="dempet">({{ kanaler.pushover.tekst }})</span></label>
+    </div>
+    {% if not kanaler.epost.klar and not kanaler.pushover.klar %}<p style="color:var(--negativ); margin:6px 0 0">Ingen kanal er klar — legg inn e-post eller Pushover under «Konto».</p>{% endif %}
+    <p class="dempet" style="margin-top:8px">Ingen avkryssing = ingen varsler. Skjer det ingenting, sendes ingenting. Bryterne på «Konto» overstyrer alle bilene.
       {% if skjema.formaal == 'kjoper' %}«Kandidater» er annonser som oppfyller kjøpskriteriene over; «prisendringer» gjelder bare kandidatene.{% else %}«Prisendringer» gjelder alle annonser i markedet.{% endif %}</p>
   </div>
 

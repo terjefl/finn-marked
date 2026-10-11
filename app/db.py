@@ -83,6 +83,10 @@ MIGRERINGER: list[tuple[int, list[str]]] = [
         "ALTER TABLE vakter ADD COLUMN varsling TEXT",     # JSON: {aktiv, typer: [...]}
         "ALTER TABLE vakter ADD COLUMN sist_varslet TEXT",
     ]),
+    # Pushover kan skrus av per bruker uavhengig av nøkkelen (e-post har varsel_epost alt).
+    (8, [
+        "ALTER TABLE brukere ADD COLUMN varsel_pushover INTEGER NOT NULL DEFAULT 1",
+    ]),
 ]
 
 SKJEMA = """
