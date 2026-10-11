@@ -1,13 +1,37 @@
-name: bygg og publiser image
+name: tester, lint og image
+
+# Sjekkene kjører FØR image-bygget: tidligere kunne et ødelagt image bli bygget og
+# publisert uten at noe stoppet det. På pull requests kjøres bare sjekkene.
 
 on:
   push:
     branches: [main]
-    paths-ignore: ['**.md', '.github/**']
+    paths-ignore: ['**.md']
+  pull_request:
   workflow_dispatch:
 
 jobs:
+  sjekk:
+    name: tester og lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: installer
+        run: pip install ruff
+      - name: lint
+        run: ruff check .
+      - name: tester
+        run: |
+          python tests/test_parser.py
+          python tests/test_innsamling.py
+          python tests/test_auksjonen.py
+
   bygg:
+    needs: sjekk
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
