@@ -158,9 +158,8 @@ def kategoriser(ann: dict, kategorier: dict, sok_tagger: list[str]) -> str:
     return ",".join(treff)
 
 
-def hent_sok(url: str, logg=lambda m: None) -> tuple[list[dict], int, int]:
-    """Henter alle sider. Returnerer (annonser, treff_fra_siden, antall_sider)."""
-    html = hent(url)
+def les_side(html: str) -> tuple[dict[str, dict], int, int]:
+    """Parser én resultatside: (kort per id, treff siden oppgir, antall sider)."""
     tekst = re.sub(r"<[^>]+>", " ", html)
     m = re.search(r"([\d][\d\s\xa0]{0,7})\s*treff", tekst)
     treff = (_tall(m.group(1)) if m else 0) or 0
@@ -170,6 +169,23 @@ def hent_sok(url: str, logg=lambda m: None) -> tuple[list[dict], int, int]:
         k = parse_kort(art)
         if k:
             ann[k["kilde_id"]] = k
+    return ann, treff, sider
+
+
+def forhandsvis(url: str, antall: int = 3) -> dict:
+    """Bare første side — til «Ny vakt»-skjemaet, så brukeren ser at URL-en virker
+    før noe lagres. Returnerer treff, sider, noen eksempler og alle titlene (til navneforslag)."""
+    ann, treff, sider = les_side(hent(url))
+    kort = list(ann.values())
+    return {"treff": treff, "sider": sider, "kort_pa_siden": len(kort),
+            "eksempler": [{k: a.get(k) for k in ("tittel", "undertittel", "pris", "km", "aar", "url")}
+                          for a in kort[:antall]],
+            "titler": [a.get("tittel") for a in kort]}
+
+
+def hent_sok(url: str, logg=lambda m: None) -> tuple[list[dict], int, int]:
+    """Henter alle sider. Returnerer (annonser, treff_fra_siden, antall_sider)."""
+    ann, treff, sider = les_side(hent(url))
     logg(f"side 1/{sider}: {len(ann)} kort (siden oppgir {treff} treff)")
     for p in range(2, sider + 1):
         time.sleep(SLEEP)

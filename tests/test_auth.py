@@ -84,6 +84,44 @@ def hoved() -> int:
             sjekk("brukere-siden som admin", c.get("/admin/brukere").status_code, 200)
             sjekk("konto-siden", c.get("/konto").status_code, 200)
 
+            # «Ny vakt»: steg 1, forhåndsvisning (stubbet kilde) og steg 2
+            from app.kilder import finn as finn_kilde
+            finn_kilde.forhandsvis = lambda url, antall=3: {
+                "treff": 61, "sider": 2, "kort_pa_siden": 50, "titler": ["BMW i4"] * 40 + ["BMW iX"],
+                "eksempler": [{"tittel": "BMW i4", "undertittel": "M50", "pris": 1, "km": 2, "aar": 2022, "url": "u"}]}
+            sjekk("ny vakt steg 1", "Sjekk søket" in c.get("/vakt/ny").text, True)
+            r = c.get("/api/forhandsvis", params={"url": "https://www.finn.no/mobility/search/car?year_from=2022&year_to=2022&page=2"})
+            sjekk("forhåndsvis", (r.json()["treff"], r.json()["navn"], r.json()["slug"]), (61, "BMW i4 2022", "bmw-i4-2022"))
+            sjekk("forhåndsvis advarer", c.get("/api/forhandsvis", params={"url": "https://vg.no/"}).json()["advarsel"][:12], "Ukjent kilde")
+            r = c.get("/vakt/ny", params={"url": "https://www.finn.no/mobility/search/car?a=1&page=2", "navn": "BMW i4 2022", "slug": "bmw-i4-2022"})
+            sjekk("ny vakt steg 2 forhåndsutfylt", 'value="https://www.finn.no/mobility/search/car?a=1"' in r.text and 'value="bmw-i4-2022"' in r.text, True)
+
+            # Lagring med rader (søk og kategorier), og automatisk første henting
+            web_hent: list = []
+            import app.web as webmod
+            webmod._hent_jobb = lambda slug, detaljer=False: web_hent.append(slug)
+            r = c.post("/vakt/lagre", data={
+                "slug": "BMW i4 2022", "navn": "BMW i4 2022", "hentetime": "7", "aktiv": "1",
+                "sok_tag": ["", "fully", "x"],
+                "sok_url": ["https://www.finn.no/mobility/search/car?a=1", "https://www.finn.no/mobility/search/car?q=fully", ""],
+                "sok_kilde": ["auto", "auto", "auto"],
+                "kat_navn": ["Fully Charged", "M50"], "kat_nokkel": ["", "m50"]})
+            sjekk("lagre med rader", (r.status_code, r.headers["location"]), (303, "/vakt/bmw-i4-2022"))
+            with db.aapen() as con:
+                v = db.vakt(con, "bmw-i4-2022")
+                sjekk("søk fra rader", [(x["tag"], x["kilde"]) for x in v["sok"]], [("alle", "finn"), ("fully", "finn")])
+                sjekk("kategorier fra rader", v["kategorier"], {"fully-charged": "Fully Charged", "m50": "M50"})
+                sjekk("eier er den innloggede", v["eier"], admin["id"])
+            import time as _t
+            _t.sleep(0.2)
+            sjekk("første henting startet automatisk", web_hent, ["bmw-i4-2022"])
+            c.post("/vakt/lagre", data={"slug": "bmw-i4-2022", "navn": "BMW i4 2022 (endret)", "hentetime": "8",
+                                        "sok_tag": "alle", "sok_url": "https://www.finn.no/mobility/search/car?a=1"})
+            _t.sleep(0.2)
+            sjekk("redigering henter ikke på nytt", web_hent, ["bmw-i4-2022"])
+            with db.aapen() as con:
+                sjekk("redigering beholder eier", db.vakt(con, "bmw-i4-2022")["eier"], admin["id"])
+
             # Inviter Kari og lag en vakt til henne på forhånd
             r = c.post("/admin/brukere/ny", data={"navn": "Kari", "epost": "", "rolle": "bruker"})
             sjekk("ny bruker → lenke", r.status_code == 303 and "lenke=" in r.headers["location"], True)
@@ -97,6 +135,10 @@ def hoved() -> int:
             with db.aapen() as con:
                 sjekk("vakten eies av Kari", db.vakt(con, "kari-bil")["eier"], kari["id"])
             sjekk("admin ser Karis vakt", c.get("/vakt/kari-bil").status_code, 200)
+            r = c.get("/vakt/bmw-i4-2022/kopier", params={"til": kari["id"]})
+            sjekk("kopi til Kari forhåndsutfylt",
+                  'value="BMW i4 2022 (endret) (Kari)"' in r.text and 'value="bmw-i4-2022-kari"' in r.text
+                  and f'<option value="{kari["id"]}" selected' in r.text, True)
 
             # Kari logger inn via invitasjonen i en annen klient
             with TestClient(app, base_url="http://testserver", follow_redirects=False) as k:
@@ -111,6 +153,7 @@ def hoved() -> int:
                 sjekk("Kari ser ikke admins vakt", k.get("/vakt/gammel").status_code, 404)
                 sjekk("Kari kan ikke redigere admins vakt", k.get("/vakt/gammel/rediger").status_code, 404)
                 sjekk("Kari får ikke brukere-siden", k.get("/admin/brukere").status_code, 404)
+                sjekk("Kari får ikke kopiere", k.get("/vakt/kari-bil/kopier").status_code, 404)
                 sjekk("Kari kan ikke overskrive admins kortnavn",
                       k.post("/vakt/lagre", data={"slug": "gammel", "navn": "x", "sok": "", "hentetime": "7"}).status_code, 404)
                 r = k.post("/vakt/lagre", data={"slug": "kari-2", "navn": "Kari 2", "sok": "", "hentetime": "7",

@@ -57,3 +57,9 @@ input[type=range] { flex:1; min-width:220px; accent-color:var(--aksent); }
 button.liten { padding:4px 10px; font-size:13px; font-weight:500; }
 select { padding:8px 10px; border:1px solid var(--kant); border-radius:7px; background:var(--bg); color:var(--tekst); font:inherit; }
 nav form.inline button { margin-left:16px; }
+.rad { display:flex; gap:6px; align-items:center; margin-bottom:6px; flex-wrap:wrap; }
+.rad input.tag, .rad input.nokkel { flex:0 0 130px; }
+.rad input.url, .rad input.navn { flex:1; min-width:220px; }
+.rad select.kilde { flex:0 0 auto; }
+.rad .kildevis { flex:0 0 auto; }
+.rad .fjern { flex:0 0 auto; padding:4px 8px; }

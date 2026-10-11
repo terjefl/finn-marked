@@ -1,59 +1,112 @@
 {% extends "base.html" %}
 {% block tittel %}{{ 'Rediger' if v else 'Ny' }} vakt — FINN-marked{% endblock %}
 {% block innhold %}
-<h1>{{ 'Rediger vakt' if v else 'Ny vakt' }}</h1>
-<p class="dempet">En vakt er ett marked. Søkene kan komme fra flere kilder samtidig — legg inn så mange du vil,
-én per linje. FINN-søket lager du ved å gjøre søket på finn.no og kopiere URL-en fra adressefeltet.</p>
+<h1>{% if kopi %}Kopi av {{ kopi.navn }}{% elif v %}Rediger vakt{% else %}Ny vakt{% endif %}</h1>
+{% if kopi %}<p class="dempet">Søk, kategorier og hentetid er kopiert. Fyll inn eierens bil og kilometerstand,
+  så er vakten klar når hen logger inn. Vakten henter selv, uavhengig av originalen.</p>{% endif %}
 
-<form method="post" action="/vakt/lagre">
+<form method="post" action="/vakt/lagre" id="skjema">
   <div class="kort">
-    <label for="navn">Navn på markedet</label>
-    <input type="text" id="navn" name="navn" required value="{{ v.navn if v else '' }}"
-           placeholder="BMW i4 2022 (M50 xDrive)">
-
-    <label for="slug">Kortnavn (brukes i URL og API — bokstaver, tall og bindestrek)</label>
-    <input type="text" id="slug" name="slug" required value="{{ v.slug if v else '' }}" placeholder="bmw-i4-2022">
-
-    <label for="sok">Søk — én linje per søk: <code>[kilde:][tag] | url</code> (tag og kilde kan utelates)</label>
-    <textarea id="sok" name="sok" required placeholder="alle | https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&registration_class=1&wheel_drive=2
-fully | https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&registration_class=1&wheel_drive=2&q=fully
-auksjon | https://www.auksjonen.no/api/category-search/search?category1=1000&q=i4">{{ sok_tekst }}</textarea>
-    <p class="dempet">
-      Kilden utledes av URL-en (<code>finn.no</code> → FINN, <code>auksjonen.no</code> → Auksjonen).
-      Vil du overstyre, skriv <code>kilde:tag</code> foran, f.eks. <code>auksjonen:auksjon</code>.
-      Taggen merkes på annonsene og brukes til kategorisering.
-      Auksjonsobjekter hentes fra <code>/api/category-search/search?category1=1000</code>
-      (kategori 1000 = Bil), og prisen deres lagres som <em>bud</em> — ikke utropspris —
-      så de holdes utenfor verdikurven.
-    </p>
-
-    <label for="kategorier">Kategorier — én per linje som <code>nokkel = visningsnavn</code></label>
-    <textarea id="kategorier" name="kategorier" style="min-height:90px" placeholder="fully = Fully Charged
-super = Supercharged
-m50 = M50">{{ kat_tekst }}</textarea>
-    <p class="dempet">Nøkkelen og visningsnavnet matches som egne ord mot fritekst i tittel/undertittel
-      («fully» og «Fully Charged» fanger begge «Fully Charged»), og nøkkelen mot søkets tag.</p>
-
-    <label for="egen_bil">Egen bil (valgfritt — vises i verdiestimatet)</label>
-    <input type="text" id="egen_bil" name="egen_bil" value="{{ v.egen_bil or '' if v else '' }}"
-           placeholder="BMW i4 M50 xDrive Fully Charged 2022">
-
-    <label for="egen_km">Egen kilometerstand</label>
-    <input type="number" id="egen_km" name="egen_km" value="{{ v.egen_km or '' if v else '' }}" placeholder="56028">
-
-    <label for="hentetime">Hent automatisk klokka (lokal tid, én gang i døgnet)</label>
-    <input type="number" id="hentetime" name="hentetime" min="0" max="23" value="{{ v.hentetime if v else 7 }}">
-
-    <label><input type="checkbox" name="aktiv" value="1" style="width:auto"
-        {{ 'checked' if (not v) or v.aktiv }}> Aktiv (hentes automatisk)</label>
+    <div class="rutenett">
+      <div><label for="navn" style="margin-top:0">Navn på markedet</label>
+        <input type="text" id="navn" name="navn" required value="{{ skjema.navn }}" placeholder="BMW i4 2022"></div>
+      <div><label for="slug" style="margin-top:0">Kortnavn (i adressen — bokstaver, tall, bindestrek)</label>
+        <input type="text" id="slug" name="slug" required value="{{ skjema.slug }}" placeholder="bmw-i4-2022"
+               {% if v %}readonly{% endif %}></div>
+      {% if brukere %}
+      <div><label for="eier" style="margin-top:0">Eier</label>
+        <select id="eier" name="eier">
+          {% for b in brukere %}<option value="{{ b.id }}" {% if b.id == skjema.eier %}selected{% endif %}>{{ b.navn }}{% if b.id == bruker.id %} (deg){% endif %}</option>{% endfor %}
+        </select></div>
+      {% endif %}
+    </div>
   </div>
-  <div style="display:flex; gap:10px">
-    <button type="submit">Lagre</button>
-    {% if v %}<a href="/vakt/{{ v.slug }}"><button class="lett" type="button">Avbryt</button></a>{% endif %}
+
+  <div class="kort">
+    <h2 style="margin-top:0">Søk</h2>
+    <p class="dempet">Ett marked kan ha flere søk, også fra flere kilder. Taggen merkes på annonsene søket finner
+      og brukes til kategorisering — et FINN-søk med <code>q=fully</code> og tag <code>fully</code> gir
+      kategorien «Fully Charged» også når ordet bare står i beskrivelsen.</p>
+    <div id="sok-rader">
+      {% for s in skjema.sok %}
+      <div class="rad sok-rad">
+        <input type="text" name="sok_tag" value="{{ s.tag }}" placeholder="alle" class="tag" title="tag">
+        <input type="url" name="sok_url" value="{{ s.url }}" placeholder="https://www.finn.no/mobility/search/car?…" class="url" required>
+        <select name="sok_kilde" class="kilde" title="kilde">
+          <option value="auto" {% if s.auto %}selected{% endif %}>auto</option>
+          <option value="finn" {% if not s.auto and s.kilde == 'finn' %}selected{% endif %}>finn</option>
+          <option value="auksjonen" {% if not s.auto and s.kilde == 'auksjonen' %}selected{% endif %}>auksjonen</option>
+        </select>
+        <span class="pill kildevis"></span>
+        <button type="button" class="lett liten fjern" title="Fjern søket">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+    <template id="sok-mal">
+      <div class="rad sok-rad">
+        <input type="text" name="sok_tag" placeholder="alle" class="tag" title="tag">
+        <input type="url" name="sok_url" placeholder="https://www.finn.no/mobility/search/car?…" class="url" required>
+        <select name="sok_kilde" class="kilde" title="kilde"><option value="auto">auto</option><option value="finn">finn</option><option value="auksjonen">auksjonen</option></select>
+        <span class="pill kildevis"></span>
+        <button type="button" class="lett liten fjern" title="Fjern søket">✕</button>
+      </div>
+    </template>
+    <button type="button" class="lett liten" id="nytt-sok">+ Legg til søk</button>
+    <p class="dempet" style="margin-top:8px">Kilden utledes av adressen (finn.no / auksjonen.no). Auksjonsobjekter lagres med
+      <em>bud</em>, ikke utropspris, og holdes utenfor verdikurven.</p>
+  </div>
+
+  <div class="kort">
+    <h2 style="margin-top:0">Kategorier</h2>
+    <p class="dempet">Visningsnavnet (eller nøkkelen) matches som egne ord i tittel og undertittel, og nøkkelen mot
+      søkets tag. Brukes til å filtrere og fargelegge.</p>
+    <div id="kat-rader">
+      {% for k, navn in skjema.kategorier.items() %}
+      <div class="rad kat-rad">
+        <input type="text" name="kat_navn" value="{{ navn }}" placeholder="Fully Charged" class="navn">
+        <input type="text" name="kat_nokkel" value="{{ k }}" placeholder="fully" class="nokkel" title="nøkkel (matcher søkets tag)">
+        <button type="button" class="lett liten fjern" title="Fjern">✕</button>
+      </div>
+      {% endfor %}
+    </div>
+    <template id="kat-mal">
+      <div class="rad kat-rad">
+        <input type="text" name="kat_navn" placeholder="Fully Charged" class="navn">
+        <input type="text" name="kat_nokkel" placeholder="fully" class="nokkel" title="nøkkel (matcher søkets tag)">
+        <button type="button" class="lett liten fjern" title="Fjern">✕</button>
+      </div>
+    </template>
+    <button type="button" class="lett liten" id="ny-kat">+ Legg til kategori</button>
+    {% if forslag %}
+    <p class="dempet" style="margin:12px 0 4px">Går igjen i annonsene — klikk for å legge til:</p>
+    <div class="filtre" id="forslag">
+      {% for f, n in forslag %}<a href="#" data-navn="{{ f }}">{{ f }} <span class="dempet">{{ n }}</span></a>{% endfor %}
+    </div>
+    {% elif not v %}
+    <p class="dempet" style="margin-top:12px">Etter første henting foreslår appen kategorier fra det som går igjen i annonsene.</p>
+    {% endif %}
+  </div>
+
+  <div class="kort">
+    <h2 style="margin-top:0">Egen bil og henting</h2>
+    <div class="rutenett">
+      <div><label for="egen_bil" style="margin-top:0">Egen bil (valgfritt — vises i verdiestimatet)</label>
+        <input type="text" id="egen_bil" name="egen_bil" value="{{ skjema.egen_bil }}" placeholder="BMW i4 M50 xDrive 2022"></div>
+      <div><label for="egen_km" style="margin-top:0">Egen kilometerstand</label>
+        <input type="number" id="egen_km" name="egen_km" value="{{ skjema.egen_km }}" placeholder="56028"></div>
+      <div><label for="hentetime" style="margin-top:0">Hent automatisk klokka (én gang i døgnet)</label>
+        <input type="number" id="hentetime" name="hentetime" min="0" max="23" value="{{ skjema.hentetime }}"></div>
+    </div>
+    <label><input type="checkbox" name="aktiv" value="1" style="width:auto" {{ 'checked' if skjema.aktiv }}> Aktiv (hentes automatisk)</label>
+  </div>
+
+  <div style="display:flex; gap:10px; align-items:center">
+    <button type="submit">{% if v %}Lagre{% else %}Lagre og hent nå{% endif %}</button>
+    <a href="{{ '/vakt/' + v.slug if v else '/' }}"><button class="lett" type="button">Avbryt</button></a>
   </div>
 </form>
 
-{% if v %}
+{% if v and not kopi %}
 <form method="post" action="/vakt/{{ v.slug }}/slett" style="margin-top:26px"
       onsubmit="return confirm('Slette vakten? Kryss av under for å slette historikken også.')">
   <div class="kort">
@@ -65,4 +118,45 @@ m50 = M50">{{ kat_tekst }}</textarea>
   <button class="fare" type="submit">Slett vakt</button>
 </form>
 {% endif %}
+
+<script>
+(() => {
+  const slugify = t => t.toLowerCase().replace(/æ/g,'ae').replace(/ø/g,'oe').replace(/å/g,'aa')
+    .replace(/[^a-z0-9_-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const kildeAv = u => { try { return new URL(u).hostname.includes('auksjonen.no') ? 'auksjonen' : 'finn'; } catch { return ''; } };
+
+  // Kortnavn følger navnet til brukeren har skrevet i det selv.
+  const navn = document.getElementById('navn'), slug = document.getElementById('slug');
+  let slugManuelt = !!slug.value && slug.value !== slugify(navn.value);
+  slug.addEventListener('input', () => { slugManuelt = true; });
+  navn.addEventListener('input', () => { if (!slugManuelt && !slug.readOnly) slug.value = slugify(navn.value); });
+
+  function kobleRad(rad) {
+    rad.querySelector('.fjern').addEventListener('click', () => rad.remove());
+    const url = rad.querySelector('.url'), kilde = rad.querySelector('.kilde'), vis = rad.querySelector('.kildevis');
+    if (url) {
+      const oppdater = () => { const k = kilde.value === 'auto' ? kildeAv(url.value) : kilde.value; vis.textContent = k; vis.hidden = !k; };
+      url.addEventListener('input', oppdater); kilde.addEventListener('change', oppdater); oppdater();
+    }
+    const n = rad.querySelector('.navn'), k = rad.querySelector('.nokkel');
+    if (n && k) n.addEventListener('input', () => { if (!k.dataset.manuelt) k.value = slugify(n.value); });
+    if (k) k.addEventListener('input', () => { k.dataset.manuelt = '1'; });
+  }
+  function nyRad(mal, beholder, verdier) {
+    const rad = document.getElementById(mal).content.firstElementChild.cloneNode(true);
+    for (const [kl, v] of Object.entries(verdier || {})) rad.querySelector('.' + kl).value = v;
+    document.getElementById(beholder).appendChild(rad); kobleRad(rad);
+    return rad;
+  }
+  document.querySelectorAll('.rad').forEach(kobleRad);
+  document.getElementById('nytt-sok').addEventListener('click', () => nyRad('sok-mal', 'sok-rader').querySelector('.url').focus());
+  document.getElementById('ny-kat').addEventListener('click', () => nyRad('kat-mal', 'kat-rader').querySelector('.navn').focus());
+  if (!document.querySelector('.sok-rad')) nyRad('sok-mal', 'sok-rader');
+  document.querySelectorAll('#forslag a').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    nyRad('kat-mal', 'kat-rader', { navn: a.dataset.navn, nokkel: slugify(a.dataset.navn) });
+    a.remove();
+  }));
+})();
+</script>
 {% endblock %}

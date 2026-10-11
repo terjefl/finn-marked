@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: "3.12"
       - name: installer
-        run: pip install ruff
+        run: pip install -r requirements-dev.txt
       - name: lint
         run: ruff check .
       - name: tester
@@ -28,6 +28,8 @@ jobs:
           python tests/test_parser.py
           python tests/test_innsamling.py
           python tests/test_auksjonen.py
+          python tests/test_sok.py
+          python tests/test_auth.py
 
   bygg:
     needs: sjekk

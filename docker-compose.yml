@@ -8,6 +8,11 @@ services:
     environment:
       - TZ=Europe/Oslo
       - FINN_DATA=/data
+      # Passkeys: RP-id og origin må være adressen brukerne faktisk åpner.
+      - FINN_RP_ID=bilmarked.flagan.net
+      - FINN_ORIGIN=https://bilmarked.flagan.net
+      # Valgfri: åpner /oppsett?nokkel=… for å gi en admin ny passkey (gjenoppretting).
+      # - FINN_OPPSETT_NOKKEL=
     ports:
       - "8099:8000"
     volumes:

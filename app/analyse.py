@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import statistics
 from html import escape as _esc
 
@@ -197,3 +198,32 @@ def svg_historikk(kjoringer: list[dict], bredde: int = 720, hoyde: int = 220, m:
 
 def _t(a: dict) -> str:
     return f'{a.get("tittel") or ""} {a.get("undertittel") or ""}'.strip()
+
+
+def kategoriforslag(annonser: list[dict], eksisterende: dict | None = None, maks: int = 12,
+                    minst: int = 2) -> list[tuple[str, int]]:
+    """Forslag til kategorier fra annonsene selv: fraser i undertitlene som går igjen.
+
+    Undertittelen på FINN er selgerens egen oppsummering («Fully Charged - Laser - H&K»),
+    så den splittes på skilletegn og frasene telles på tvers av annonsene. Rene tall,
+    fraser som alt er kategorier, og fraser nesten alle annonsene har (modellnavnet)
+    filtreres bort. Resultat: [(frase, antall)], flest først.
+    """
+    har = {str(v).lower() for v in (eksisterende or {}).values()} | {k.lower() for k in (eksisterende or {})}
+    telling: dict[str, int] = {}
+    visning: dict[str, str] = {}
+    for a in annonser:
+        sett: set[str] = set()
+        for frase in re.split(r"\s*[-–|/,·•∙]\s*|\s{2,}", a.get("undertittel") or ""):
+            f = re.sub(r"\s+", " ", frase).strip(" .!")
+            n = f.lower()
+            if len(n) < 2 or len(n) > 40 or n in har or re.fullmatch(r"[\d\s.,]+(km|kr)?", n):
+                continue
+            sett.add(n)
+            visning.setdefault(n, f)
+        for n in sett:
+            telling[n] = telling.get(n, 0) + 1
+    tak = max(1, int(len(annonser) * 0.9))
+    ut = [(visning[n], c) for n, c in telling.items() if minst <= c <= tak]
+    ut.sort(key=lambda p: (-p[1], p[0].lower()))
+    return ut[:maks]

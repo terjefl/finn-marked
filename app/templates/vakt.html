@@ -9,6 +9,12 @@
       <button{% if kjorer_aktiv %} disabled{% endif %}>{% if kjorer_aktiv %}Henter …{% else %}Oppdater nå{% endif %}</button></form>
     <a href="/vakt/{{ v.slug }}/rediger"><button class="lett">Rediger søk</button></a>
     <a href="/api/vakt/{{ v.slug }}" target="_blank"><button class="lett">JSON</button></a>
+    {% if brukervalg %}
+    <form class="inline" method="get" action="/vakt/{{ v.slug }}/kopier" style="display:flex; gap:6px">
+      <select name="til">{% for u in brukervalg %}<option value="{{ u.id }}">{{ u.navn }}</option>{% endfor %}</select>
+      <button class="lett" title="Ny vakt for valgt bruker, med samme søk">Kopier til</button>
+    </form>
+    {% endif %}
   </div>
 </div>
 <div class="dempet" style="margin-bottom:12px">

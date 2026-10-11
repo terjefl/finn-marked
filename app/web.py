@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from . import analyse, auth, db, innsamling
+from . import sok as sokmod
 from .sok import parse_kategorier, parse_sok
 
 BASE = Path(__file__).parent
@@ -198,9 +199,51 @@ def forside(request: Request, con: sqlite3.Connection = Depends(kon), b: dict = 
     return templates.TemplateResponse(request, "forside.html", {"oversikt": oversikt})
 
 
+def _brukervalg(con, b: dict) -> list[dict]:
+    """Eier-valget i skjemaene — bare admin får velge."""
+    return [{"id": u["id"], "navn": u["navn"]} for u in auth.brukere(con) if u["aktiv"]] if auth.er_admin(b) else []
+
+
 @app.get("/vakt/ny", response_class=HTMLResponse)
-def ny_vakt(request: Request):
-    return templates.TemplateResponse(request, "rediger.html", _skjema_kontekst(None))
+def ny_vakt(request: Request, url: str | None = None, navn: str = "", slug: str = "", eier: str = "",
+            con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+    """Steg 1 (uten url): lim inn én søke-URL, få forhåndsvisning og navneforslag.
+    Steg 2 (med url): fullt skjema, forhåndsutfylt med søket og forslagene fra steg 1."""
+    valgt_eier = int(eier) if (auth.er_admin(b) and eier.isdigit()) else b["id"]
+    if not url:
+        return templates.TemplateResponse(request, "ny.html",
+                                          {"brukere": _brukervalg(con, b), "valgt_eier": valgt_eier})
+    url = sokmod.rens_url(url)
+    kilde = sokmod.kilde_fra_url(url)
+    k = _skjema_kontekst(None)
+    k["skjema"].update({"navn": navn, "slug": slug or sokmod.slugify(navn), "eier": valgt_eier,
+                        "sok": [{"tag": "alle" if kilde == "finn" else kilde, "url": url, "kilde": kilde, "auto": True}]})
+    k["brukere"] = _brukervalg(con, b)
+    return templates.TemplateResponse(request, "rediger.html", k)
+
+
+@app.get("/api/forhandsvis")
+def api_forhandsvis(url: str, b: dict = Depends(bruker)):
+    """Første side av et søk — til «Ny vakt». Henter fra kilden med én gang (1–2 s)."""
+    url = sokmod.rens_url(url)
+    advarsel = sokmod.sjekk_url(url)
+    if advarsel:
+        return {"advarsel": advarsel}
+    kilde = sokmod.kilde_fra_url(url)
+    try:
+        if kilde == "auksjonen":
+            from .kilder import auksjonen as kildemod
+        else:
+            from .kilder import finn as kildemod
+        f = kildemod.forhandsvis(url)
+    except RuntimeError as e:
+        raise HTTPException(502, str(e)) from e
+    if kilde == "finn" and f["treff"] and not f["kort_pa_siden"]:
+        return {"advarsel": f"Siden oppgir {f['treff']} treff, men ingen annonser ble gjenkjent — "
+                            "FINN kan ha endret siden. Si fra."}
+    navn, slug = sokmod.navneforslag(url, f["titler"])
+    return {"advarsel": None, "kilde": kilde, "treff": f["treff"], "sider": f["sider"],
+            "eksempler": f["eksempler"], "navn": navn, "slug": slug}
 
 
 # ⚠️ Rekkefølge: /vakt/ny MÅ stå før /vakt/{slug}, ellers fanger {slug} ordet «ny».
@@ -232,6 +275,7 @@ def vakt_side(request: Request, slug: str, kategori: str | None = None, q: str |
         "q": q or "",
         "kjorer": _kjorer.get(slug),
         "kjorer_aktiv": innsamling.er_opptatt(slug),
+        "brukervalg": [u for u in _brukervalg(con, b) if u["id"] != k["v"].get("eier")],
         "i_dag": date.today().isoformat(),
     })
 
@@ -249,30 +293,69 @@ def hent(slug: str, detaljer: str | None = Form(None), con: sqlite3.Connection =
 
 
 def _skjema_kontekst(v: dict | None) -> dict:
-    if not v:  # ny vakt: tomme felt, men et forslag til kategorier
-        return {"v": None, "sok_tekst": "",
-                "kat_tekst": "fully = Fully Charged\nsuper = Supercharged\nm50 = M50"}
-    sok_tekst = "\n".join(f"{s.get('tag', 'alle')} | {s['url']}" for s in v["sok"])
-    kat_tekst = "\n".join(f"{k} = {navn}" for k, navn in (v.get("kategorier") or {}).items())
-    return {"v": v, "sok_tekst": sok_tekst, "kat_tekst": kat_tekst}
+    """Feltene rediger.html viser. `skjema` er flat, så ny/rediger/kopi deler mal."""
+    if not v:
+        return {"v": None, "kopi": None, "forslag": [], "brukere": [],
+                "skjema": {"navn": "", "slug": "", "eier": None, "sok": [], "kategorier": {},
+                           "egen_bil": "", "egen_km": "", "hentetime": 7, "aktiv": True}}
+    sok = [{"tag": s.get("tag") or "", "url": s["url"], "kilde": s.get("kilde") or "finn",
+            "auto": (s.get("kilde") or "finn") == sokmod.kilde_fra_url(s["url"])} for s in v["sok"]]
+    return {"v": v, "kopi": None, "forslag": [], "brukere": [],
+            "skjema": {"navn": v["navn"], "slug": v["slug"], "eier": v.get("eier"), "sok": sok,
+                       "kategorier": v.get("kategorier") or {}, "egen_bil": v.get("egen_bil") or "",
+                       "egen_km": v.get("egen_km") or "", "hentetime": v.get("hentetime") or 7,
+                       "aktiv": bool(v.get("aktiv"))}}
+
+
+def _forslag(con, v: dict) -> list[tuple[str, int]]:
+    annonser = db.ok(con, "SELECT undertittel FROM annonser WHERE slug=? AND aktiv=1", (v["slug"],))
+    return analyse.kategoriforslag(annonser, v.get("kategorier"))
 
 
 @app.get("/vakt/{slug}/rediger", response_class=HTMLResponse)
 def rediger(request: Request, slug: str, con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     v = _min_vakt(con, slug, b)
-    return templates.TemplateResponse(request, "rediger.html", _skjema_kontekst(v))
+    k = _skjema_kontekst(v)
+    k["forslag"] = _forslag(con, v)
+    k["brukere"] = _brukervalg(con, b)
+    return templates.TemplateResponse(request, "rediger.html", k)
+
+
+@app.get("/vakt/{slug}/kopier", response_class=HTMLResponse)
+def kopier(request: Request, slug: str, til: str = "", con: sqlite3.Connection = Depends(kon),
+           a: dict = Depends(admin)):
+    """Ny vakt for en annen bruker, basert på denne: søk, kategorier og hentetid blir med,
+    egen bil/km og kortnavn er nye. Admin fyller inn bilen før brukeren logger inn."""
+    v = _min_vakt(con, slug, a)
+    mottaker = auth.bruker(con, int(til)) if til.isdigit() else None
+    k = _skjema_kontekst(v)
+    k["v"], k["kopi"] = None, v
+    k["forslag"] = _forslag(con, v)
+    k["brukere"] = _brukervalg(con, a)
+    k["skjema"].update({
+        "navn": f"{v['navn']} ({mottaker['navn']})" if mottaker else f"{v['navn']} (kopi)",
+        "slug": f"{v['slug']}-{sokmod.slugify(mottaker['navn'])}" if mottaker else f"{v['slug']}-kopi",
+        "eier": mottaker["id"] if mottaker else a["id"], "egen_bil": "", "egen_km": "",
+    })
+    return templates.TemplateResponse(request, "rediger.html", k)
 
 
 
 
 @app.post("/vakt/lagre")
-def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(...),
+def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
           kategorier: str = Form(""), egen_bil: str = Form(""), egen_km: str = Form(""),
           hentetime: int = Form(7), aktiv: str | None = Form(None), eier: str = Form(""),
+          sok_tag: list[str] = Form([]), sok_url: list[str] = Form([]), sok_kilde: list[str] = Form([]),
+          kat_navn: list[str] = Form([]), kat_nokkel: list[str] = Form([]),
           con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
-    ren = "".join(c if (c.isalnum() or c in "-_") else "-" for c in slug.lower()).strip("-")
+    """Skjemaet sender søk og kategorier som rader (sok_*/kat_*). De gamle tekstfeltene
+    `sok`/`kategorier` godtas fortsatt, så eldre klienter og tester virker."""
+    ren = sokmod.slugify(slug)
     if not ren:
         raise HTTPException(400, "slug mangler")
+    nye_sok = sokmod.bygg_sok(sok_tag, sok_url, sok_kilde) if sok_url else parse_sok(sok)
+    nye_kat = sokmod.bygg_kategorier(kat_nokkel, kat_navn) if (kat_navn or kat_nokkel) else parse_kategorier(kategorier)
     eksisterende = db.vakt(con, ren)
     if eksisterende:
         _min_vakt(con, ren, b)                     # andres kortnavn kan ikke overskrives
@@ -281,7 +364,7 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(...),
     if eksisterende and not eier.strip():
         ny_eier = eksisterende.get("eier") or ny_eier
     db.lagre_vakt(con, {
-        "slug": ren, "navn": navn, "sok": parse_sok(sok), "kategorier": parse_kategorier(kategorier),
+        "slug": ren, "navn": navn.strip() or ren, "sok": nye_sok, "kategorier": nye_kat,
         "egen_bil": egen_bil or None, "egen_km": int(egen_km) if egen_km.strip().isdigit() else None,
         "hentetime": hentetime, "aktiv": 1 if aktiv else 0,
         "opprettet": eksisterende.get("opprettet") if eksisterende else None,
@@ -290,6 +373,10 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(...),
         "eier": ny_eier,
     })
     con.commit()
+    if not eksisterende and nye_sok and not innsamling.er_opptatt(ren):
+        # Ny vakt: hent med en gang, så siden har tall når den åpnes.
+        _logg_til(ren)("Henter …")
+        threading.Thread(target=_hent_jobb, args=(ren, False), daemon=True, name=f"hent-{ren}").start()
     return RedirectResponse(f"/vakt/{ren}", status_code=303)
 
 

@@ -125,6 +125,15 @@ def _normaliser(o: dict) -> dict:
     }
 
 
+def forhandsvis(url: str, antall: int = 3) -> dict:
+    """Første side av et auksjonen.no-søk, samme form som finn.forhandsvis."""
+    kort, totalt = AuksjonenKilde().hent({"url": url, "maks": "1"})
+    return {"treff": totalt, "sider": -(-totalt // SIDE) if totalt else 0, "kort_pa_siden": len(kort),
+            "eksempler": [{k: a.get(k) for k in ("tittel", "undertittel", "pris", "km", "aar", "url")}
+                          for a in kort[:antall]],
+            "titler": [a.get("tittel") for a in kort]}
+
+
 class AuksjonenKilde:
     """Auksjonen.no: aktive auksjoner i en kategori, valgfritt fritekstfiltrert."""
 

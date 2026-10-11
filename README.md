@@ -21,9 +21,8 @@ hver **vakt** er ett marked med ett eller flere søk, og hvert søk navngir sin
 * **Verdikurve** per marked: regresjon på utropspriser mot kilometerstand, med
   spredning. Sammenlignbare innen ±10 000 km vises ved siden av, fordi det tallet
   er lettere å forholde seg til enn en linje.
-* **Endringsstrøm** på JSON-API (`/api/vakt/<slug>/endringer?since=…`) som en
-  ekstern varsler kan lese. `since` tåler både `2026-10-11 13:52:11` og ISO med
-  `T`.
+* **Flere brukere** med passkeys: hver bruker har sine egne vakter, admin ser alle
+  og kan sette opp en vakt for en bruker før hen logger inn første gang.
 
 Utropspriser er ikke oppnådde salgspriser. Kilden viser ikke hva bilene faktisk
 gikk for — liggetid og *hva* som ble solgt er det nærmeste vi kommer. Bud fra
@@ -39,14 +38,43 @@ auksjoner holdes utenfor median, kurve og km-bøtter, og vises bare i annonselis
 Kategorier er ikke hardkodet per merke: mønstrene utledes av vaktens egne
 `kategorier`-nøkler (se «Nye vakter»).
 
+## Brukere og innlogging
+
+Alt unntatt `/helse` krever innlogget bruker. Innlogging er **passkey** (WebAuthn:
+Touch ID, Face ID, Windows Hello, sikkerhetsnøkkel) — ingen passord i det hele tatt.
+
+* **Første gang:** basen har ingen brukere, så `/` sender deg til `/oppsett`. Skriv
+  navnet ditt og lag en passkey; du blir administrator, og vaktene som alt finnes
+  i basen blir dine.
+* **Invitere:** «Brukere» i menyen (admin) → navn → «Opprett og lag invitasjonslenke».
+  Lenken er gyldig i 7 dager og kan brukes én gang; brukeren åpner den og lager sin
+  egen passkey. Tjenesten sender ikke e-post, du sender lenken selv.
+* **Vakt klar før første innlogging:** «Lag vakt» på brukerens rad, eller «Kopier til»
+  på en vakt du alt har (søk og kategorier blir med, du fyller inn bilen og km).
+  Vakten henter med en gang, så tallene er på plass når brukeren logger inn.
+* **Flere enheter:** «Konto» → «Lag passkey» på hver enhet du vil logge inn fra.
+* **Mistet passkey:** admin lager en ny invitasjon til brukeren (samme konto, ny
+  passkey). Mister *alle* admin-passkeys: sett `FINN_OPPSETT_NOKKEL` i miljøet og
+  åpne `/oppsett?nokkel=<verdien>`.
+* **Eierskap:** én eier per vakt. Vanlige brukere ser og redigerer bare sine egne;
+  admin ser alle (eieren vises som en pill på forsiden).
+
+Miljøvariabler: `FINN_RP_ID` (vertsnavnet brukerne åpner, f.eks.
+`bilmarked.flagan.net`) og `FINN_ORIGIN` (`https://bilmarked.flagan.net`). Uten dem
+utledes begge av forespørselen, som er greit lokalt (`localhost`), men sett dem i
+drift. Cloudflare Access foran tjenesten er uavhengig av dette og kan stå.
+
 ## API
 
+JSON-endepunktene krever samme sesjonscookie som sidene (brukes av «JSON»-knappen).
+Den tidligere endringsstrømmen for ekstern varsling er fjernet.
+
 ```
-GET /api/vakter                              alle vakter + nøkkeltall
+GET /api/vakter                              egne vakter + nøkkeltall (admin: alle)
 GET /api/vakt/<slug>                         full markedsdata for én vakt
 GET /api/vakt/<slug>/annonser.json           annonser (valgfritt ?kategori=)
-GET /api/vakt/<slug>/endringer?since=ISO     hendelser siden tidspunkt
-GET /helse                                   helsesjekk (Docker healthcheck) + scheduler-tilstand
+GET /api/forhandsvis?url=…                   første side av et søk (til «Ny vakt»)
+GET /helse                                   helsesjekk (Docker healthcheck) + scheduler-tilstand, åpen
 ```
 
 ## Drift
@@ -69,45 +97,53 @@ GET /helse                                   helsesjekk (Docker healthcheck) + s
 * **Henting:** én gang i døgnet per vakt, styrt av `hentetime` i vakt-konfigurasjonen.
   Kjøres også manuelt fra UI-et. En henting av gangen per vakt: både scheduleren og
   «Oppdater nå»-knappen tar samme lås, så de ikke skriver over hverandre.
-* **Tilgang:** `https://bilmarked.flagan.net` bak NPM + Cloudflare Access.
+* **Tilgang:** `https://bilmarked.flagan.net` bak NPM + Cloudflare Access, og
+  passkey-innlogging i appen (se «Brukere og innlogging»). Stacken må sette
+  `FINN_RP_ID` og `FINN_ORIGIN`.
+* **Én prosess:** scheduleren, hentelåsene og passkey-utfordringene lever i minnet,
+  så tjenesten skal kjøre med én uvicorn-worker (standard).
 
 ## Lokal kjøring
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 FINN_DATA=./data .venv/bin/uvicorn app.web:app --port 8099
+# første besøk på http://localhost:8099 → /oppsett (passkeys virker på localhost)
 
-# tester (ingen tredjepartsavhengigheter) og lint
+# tester uten tredjepartsavhengigheter
 python3 tests/test_parser.py
 python3 tests/test_innsamling.py
 python3 tests/test_auksjonen.py
-.venv/bin/ruff check .        # eller: pip install ruff
+python3 tests/test_sok.py
+# trenger fastapi/jinja2/webauthn/httpx (requirements-dev.txt)
+.venv/bin/python tests/test_auth.py
+.venv/bin/ruff check .
 ```
 
 ## Nye vakter: søk og kategorier
 
-I skjemaet skrives ett søk per linje, på formen `[kilde:][tag] | url`:
+«Ny vakt» er to steg. Først limer du inn **én** søke-URL fra finn.no (eller
+auksjonen.no); appen henter første side med en gang og viser antall treff, noen
+eksempler og et forslag til navn og kortnavn («BMW i4 2022» fra vanligste tittel +
+`year_from`/`year_to`). Så får du hele skjemaet, forhåndsutfylt. Ved lagring starter
+første henting av seg selv.
 
-```
-alle | https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022
-auksjon | https://www.auksjonen.no/api/category-search/search?category1=1000&q=i4
-```
+**Søk** er rader med tag og URL. Kilden utledes av adressen (`auksjonen.no` →
+`auksjonen`, ellers `finn`) og kan overstyres per rad. Taggen merkes på annonsene
+søket finner, og `page=` i URL-en strippes (vi paginerer selv). Et FINN-søk med
+`q=fully` og tag `fully` gir kategorien også når ordet bare står i beskrivelsen.
 
-Kilden utledes av URL-en (`auksjonen.no` → `auksjonen`, ellers `finn`); skriv
-`kilde:tag` foran bare for å overstyre. Taggen merkes på annonsene fra søket.
+**Kategorier** er rader med visningsnavn og nøkkel (nøkkelen lages av navnet om du
+lar den stå tom). Hver kategori merkes når nøkkelen eller visningsnavnet står som
+eget ord i tittel/undertittel — `fully` fanger «Fully Charged», `m50` fanger «M50».
+Etter første henting foreslår rediger-siden kategorier fra det som går igjen i
+undertitlene (f.eks. «Supercharged 17», «Laser 11»); klikk for å legge til. Ingen
+kodeendring trengs for nye merker.
 
-Kategorier skrives som `nokkel = visningsnavn`, ett par per linje:
+Importeren og eldre klienter kan fortsatt sende søk som tekst (`[kilde:][tag] | url`,
+se `app/sok.py`).
 
-```
-fully = Fully Charged
-m50 = M50
-```
-
-Hver kategori merkes når **nøkkelen eller visningsnavnet** står som eget ord i
-tittel/undertittel — `fully` fanger «Fully Charged», `m50` fanger «M50». Ingen
-kodeendring trengs for nye merker: legg bare inn kategoriene i vaktens skjema.
-
-## Importere historikk fra Hermes-scriptet
+## Importere historikk fra det gamle scriptet
 
 ```bash
 python3 scripts/importer.py --kilde ~/.hermes/data/finn_bil_marked/bmw-i4-2022.sqlite \

@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block tittel %}Ny vakt — FINN-marked{% endblock %}
+{% block innhold %}
+<h1>Ny vakt</h1>
+<p class="dempet">Gjør søket på finn.no (merke, modell, årsmodell, det du vil følge), kopier adressen fra
+  adressefeltet og lim den inn her. Appen sjekker søket med en gang og foreslår navn.</p>
+
+<form method="get" action="/vakt/ny" class="kort" id="skjema">
+  <label for="url" style="margin-top:0">Søke-URL fra finn.no eller auksjonen.no</label>
+  <div style="display:flex; gap:8px; flex-wrap:wrap">
+    <input type="url" id="url" name="url" required placeholder="https://www.finn.no/mobility/search/car?…" style="flex:1; min-width:260px">
+    <button type="button" class="lett" id="sjekk">Sjekk søket</button>
+  </div>
+  {% if brukere %}
+  <label for="eier">Vakten er for</label>
+  <select id="eier" name="eier">
+    {% for b in brukere %}<option value="{{ b.id }}" {% if b.id == valgt_eier %}selected{% endif %}>{{ b.navn }}{% if b.id == bruker.id %} (deg){% endif %}</option>{% endfor %}
+  </select>
+  {% endif %}
+  <input type="hidden" name="navn" id="navn"><input type="hidden" name="slug" id="slug">
+  <p class="feil" id="feil"></p>
+  <div id="resultat" hidden>
+    <div class="rutenett">
+      <div><div class="dempet">Treff</div><div class="nokkel" id="treff">–</div><div class="dempet" id="sider"></div></div>
+      <div><div class="dempet">Foreslått navn</div><div class="nokkel" id="navnvis" style="font-size:18px">–</div><div class="dempet" id="slugvis"></div></div>
+    </div>
+    <table style="margin-top:10px"><thead><tr><th>Eksempel</th><th>Pris</th><th>Km</th><th>År</th></tr></thead><tbody id="eks"></tbody></table>
+  </div>
+  <div style="margin-top:14px; display:flex; gap:8px">
+    <button type="submit" id="videre" disabled>Fortsett til oppsettet</button>
+  </div>
+</form>
+
+<script>
+(() => {
+  const url = document.getElementById('url'), feil = document.getElementById('feil');
+  const res = document.getElementById('resultat'), videre = document.getElementById('videre');
+  const kr = n => n == null ? '–' : Math.round(n).toLocaleString('nb-NO').replace(/,/g, ' ');
+  let sjekket = '';
+  async function sjekk() {
+    feil.textContent = ''; res.hidden = true; videre.disabled = true;
+    const u = url.value.trim();
+    if (!u) return;
+    feil.textContent = 'Sjekker …';
+    try {
+      const r = await fetch('/api/forhandsvis?url=' + encodeURIComponent(u));
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || r.statusText);
+      feil.textContent = d.advarsel || '';
+      if (d.advarsel) return;
+      document.getElementById('treff').textContent = d.treff;
+      document.getElementById('sider').textContent = d.sider + (d.sider == 1 ? ' side' : ' sider') + ' · ' + d.kilde;
+      document.getElementById('navnvis').textContent = d.navn || '(fyll inn selv)';
+      document.getElementById('slugvis').textContent = d.slug ? '/vakt/' + d.slug : '';
+      document.getElementById('navn').value = d.navn; document.getElementById('slug').value = d.slug;
+      document.getElementById('eks').innerHTML = d.eksempler.map(a =>
+        `<tr><td><a href="${a.url}" target="_blank">${a.tittel || ''} ${a.undertittel || ''}</a></td><td>${kr(a.pris)}</td><td>${kr(a.km)}</td><td>${a.aar || '–'}</td></tr>`).join('')
+        || '<tr><td colspan="4" class="dempet">Ingen annonser på første side.</td></tr>';
+      res.hidden = false; videre.disabled = false; sjekket = u;
+    } catch (e) { feil.textContent = 'Kunne ikke sjekke søket: ' + e.message; }
+  }
+  document.getElementById('sjekk').addEventListener('click', sjekk);
+  url.addEventListener('change', sjekk);
+  url.addEventListener('paste', () => setTimeout(sjekk, 50));
+  document.getElementById('skjema').addEventListener('submit', e => {
+    if (url.value.trim() !== sjekket) { e.preventDefault(); sjekk(); }
+  });
+})();
+</script>
+{% endblock %}
