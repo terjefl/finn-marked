@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import statistics
 import time
-from datetime import date, datetime
+from datetime import date
 
 from . import db, kilder
 
@@ -21,23 +21,31 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
     treff: dict[str, int] = {}
     advarsler: list[str] = []
 
+    avbrutt: list[str] = []
     for sok in v["sok"]:
         navn = sok.get("kilde") or "finn"
         ann, t = kilder.hent(sok, logg)
         treff[navn] = max(treff.get(navn, 0), t)
-        if t and len(ann) < t * 0.9:
+        if t and len(ann) < t * 0.1:
+            # Parseren har åpenbart feilet (eller siden er endret): da skal ingenting
+            # skrives. Uten denne bremsen ble hele markedet markert som «borte» og
+            # hendelsesloggen fylt opp med falske hendelser.
+            avbrutt.append(f"«{sok.get('tag')}» ({navn}): fant {len(ann)} unike, kilden oppgir {t}")
+        elif t and len(ann) < t * 0.9:
             advarsler.append(f"«{sok.get('tag')}» ({navn}): fant {len(ann)} unike, kilden oppgir {t}")
         for a in ann:
             nokkel = (a["kilde"], a["kilde_id"])
             tag = sok.get("tag") or ""
-            if not tag:
-                pass
             if nokkel in alle:
                 alle[nokkel]["sok_tagger"].update({tag} if tag else set())
             else:
                 a["sok_tagger"] = {tag} if tag else set()
                 alle[nokkel] = a
         time.sleep(1.0)
+
+    if avbrutt:
+        raise RuntimeError("avbrutt, ingenting skrevet — parsingen ga nesten ingen treff: "
+                           + "; ".join(avbrutt))
 
     nye = prisendret = solgte = borte = 0
     i_dag = date.today().isoformat()
@@ -118,7 +126,7 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
     con.execute("""INSERT INTO kjøringer (slug, dato, annonser_hentet, treff, aktive, median, p25, p75,
                                           min, max, varighet)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-                (slug, datetime.now().isoformat(timespec="seconds"), len(alle), treff_totalt, len(priser),
+                (slug, db.naa(), len(alle), treff_totalt, len(priser),
                  statistics.median(priser) if priser else None, pct(25), pct(75),
                  priser[0] if priser else None, priser[-1] if priser else None, varighet))
     kilder_txt = ", ".join(f"{k}: {n}" for k, n in sorted(treff.items()))
@@ -126,8 +134,8 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
               f"{nye} nye, {prisendret} prisendringer, {solgte} solgt, {borte} borte ({varighet}s)")
     if advarsler:
         status += " | ADVARSEL: " + "; ".join(advarsler)
-    con.execute("UPDATE vakter SET sist_hentet=datetime('now','localtime'), sist_status=? WHERE slug=?",
-                (status, slug))
+    con.execute("UPDATE vakter SET sist_hentet=?, sist_status=? WHERE slug=?",
+                (db.naa(), status, slug))
     con.commit()
     db.slett_gammelt(con)
     con.commit()
