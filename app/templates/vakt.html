@@ -123,8 +123,9 @@
   <h2 style="margin-top:0">Pris mot kilometerstand</h2>
   <div class="slider">
     <label for="km" style="margin:0">{{ 'Ønsket kilometerstand:' if v.formaal == 'kjoper' else 'Din kilometerstand:' }}</label>
-    <input type="range" id="km" min="{{ kurve.serie | map(attribute=0) | min }}" max="{{ kurve.serie | map(attribute=0) | max }}"
-           step="1000" value="{{ kurve.egen_km or 60000 }}">
+    {% set km_maks = ((kurve.serie | map(attribute=0) | max) // 10000 + 1) * 10000 %}
+    <input type="range" id="km" min="0" max="{{ km_maks }}" step="1000" value="{{ kurve.egen_km or 60000 }}"
+           data-min="{{ kurve.serie | map(attribute=0) | min }}" data-maks="{{ kurve.serie | map(attribute=0) | max }}">
     <span class="dempet" id="kmvis">{{ kurve.egen_km or 60000 }} km</span>
   </div>
   <div class="rutenett">
@@ -150,10 +151,12 @@
   const nabo = document.getElementById('nabo');
   const naboAnt = document.getElementById('naboant');
   const kr = n => Math.round(n).toLocaleString('nb-NO').replace(/,/g, ' ') + ' kr';
+  const dataMin = +felt.dataset.min, dataMaks = +felt.dataset.maks;
   const oppdater = () => {
     const km = +felt.value;
-    vis.textContent = km.toLocaleString('nb-NO') + ' km';
-    est.textContent = kr(a + b * km);
+    const utenfor = km < dataMin || km > dataMaks;
+    vis.textContent = km.toLocaleString('nb-NO') + ' km' + (utenfor ? ' (utenfor annonsene, linja forlenges)' : '');
+    est.textContent = kr(Math.max(0, a + b * km));
     const n = serie.filter(p => Math.abs(p[0] - km) <= 10000).map(p => p[1]).sort((x, y) => x - y);
     nabo.textContent = n.length ? kr(n[Math.floor(n.length / 2)]) : '–';
     naboAnt.textContent = n.length ? n.length + ' annonser: ' + kr(n[0]) + ' – ' + kr(n[n.length - 1]) : 'ingen i nabolaget';

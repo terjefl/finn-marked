@@ -212,7 +212,8 @@ def helse(con: sqlite3.Connection = Depends(kon)):
 
 
 @app.get("/", response_class=HTMLResponse)
-def forside(request: Request, alle: str = "", con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+def forside(request: Request, alle: str = "", formaal: str = "", con: sqlite3.Connection = Depends(kon),
+            b: dict = Depends(bruker)):
     """Egne biler som standard. Admin kan vise alle brukeres med ?alle=1, gruppert per eier."""
     oversikt = []
     vis_alle = auth.er_admin(b) and alle == "1"
@@ -222,6 +223,8 @@ def forside(request: Request, alle: str = "", con: sqlite3.Connection = Depends(
     vakter = db.vakter(con, eier=None if vis_alle else b["id"])
     if vis_alle:
         vakter.sort(key=lambda v: (v.get("eier") != b["id"], (eiere.get(v.get("eier")) or "").lower(), v["navn"].lower()))
+    if formaal in ("eier", "kjoper"):
+        vakter = [v for v in vakter if (v.get("formaal") or "eier") == formaal]
     for v in vakter:
         annonser = db.ok(con, "SELECT * FROM annonser WHERE slug=? AND aktiv=1 AND solgt=0", (v["slug"],))
         solgte = con.execute("SELECT COUNT(*) c FROM annonser WHERE slug=? AND solgt=1",
@@ -233,7 +236,8 @@ def forside(request: Request, alle: str = "", con: sqlite3.Connection = Depends(
                          "solgte": solgte, "nye_uke": nye, "status": _kjorer.get(v["slug"]),
                          "eier": eiere.get(v.get("eier")), "egen": v.get("eier") == b["id"]})
     return templates.TemplateResponse(request, "forside.html",
-                                      {"oversikt": oversikt, "vis_alle": vis_alle, "andre": andre})
+                                      {"oversikt": oversikt, "vis_alle": vis_alle, "andre": andre,
+                                       "formaal": formaal if formaal in ("eier", "kjoper") else ""})
 
 
 def _kanaler(con, b: dict) -> dict:
