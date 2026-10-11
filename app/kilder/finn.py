@@ -434,19 +434,18 @@ def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] 
     nmo = _normaliser_navn(modell)
     mo_treff = None
     if nmo:
+        # 1) Eksakt: «I4» → «i4», «ID.4 GTX» → «ID.4 GTX».
         eksakt = [x for x in modeller if _normaliser_navn(x["navn"]) == nmo]
         if eksakt:
             mo_treff = eksakt[0]
-        else:
-            kand = [x for x in modeller if _normaliser_navn(x["navn"]) and
-                    (nmo.startswith(_normaliser_navn(x["navn"])) or _normaliser_navn(x["navn"]).startswith(nmo))]
-            # Foretrekk det lengste navnet som fortsatt er et prefiks av Vegvesenets («ID.4» før «ID.4 GTX»
-            # når Vegvesenet sier «ID.4»; «ID.4 GTX» når Vegvesenet sier «ID.4 GTX»).
-            kand = [x for x in kand if nmo.startswith(_normaliser_navn(x["navn"]))] or kand
-            mo_treff = max(kand, key=lambda x: len(x["navn"])) if kand else None
+        # 2) FINN-navnet er et prefiks av Vegvesenets: «ID.4» når Vegvesenet sier «ID.4 GTX»
+        #    (lengste prefiks vinner).
         if not mo_treff:
-            # Serie-navn: FINN sier «3-Serie», «Q4-Serie», «iX-Serie», «EQC-Klasse» der Vegvesenet
-            # sier «320D», «Q4 E-TRON», «IX3», «EQC». Match på stammen foran -Serie/-Klasse.
+            kand = [x for x in modeller if _normaliser_navn(x["navn"]) and nmo.startswith(_normaliser_navn(x["navn"]))]
+            mo_treff = max(kand, key=lambda x: len(x["navn"])) if kand else None
+        # 3) Serie-/klassenavn: «3-Serie», «Q4-Serie», «Caddy-Serie», «EQC-Klasse» der Vegvesenet
+        #    sier «320D», «Q4 E-TRON», «CADDY», «EQC». Match på stammen foran -Serie/-Klasse.
+        if not mo_treff:
             stammer = []
             for x in modeller:
                 m = re.match(r"^(.+?)[\s-]*(serie|klasse)$", x["navn"], re.I)
@@ -455,6 +454,11 @@ def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] 
             kand2 = [(st, x) for st, x in stammer if st and nmo.startswith(st)]
             if kand2:
                 mo_treff = max(kand2, key=lambda p: len(p[0]))[1]
+        # 4) Vegvesenets navn er et prefiks av FINN-navnet: «CADDY» → kortest mulig utvidelse,
+        #    ikke «Caddy Alltrack» når det finnes noe nærmere. Sist, fordi det gjetter mest.
+        if not mo_treff:
+            kand = [x for x in modeller if _normaliser_navn(x["navn"]).startswith(nmo)]
+            mo_treff = min(kand, key=lambda x: len(x["navn"])) if kand else None
     return {"merke": {"navn": m_treff["navn"], "kode": m_treff["kode"]},
             "modell": ({"navn": mo_treff["navn"], "kode": mo_treff["kode"]} if mo_treff else None),
             "modeller": modeller}

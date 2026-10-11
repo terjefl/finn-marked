@@ -44,7 +44,8 @@
     <table>
       <tr><td class="dempet">Merke / modell</td><td>{{ kj.merke or '–' }} {{ kj.modell or '' }}</td></tr>
       <tr><td class="dempet">Typebetegnelse</td><td>{{ kj.typebetegnelse or '–' }}</td></tr>
-      <tr><td class="dempet">Årsmodell</td><td>{{ kj.aar or '–' }}</td></tr>
+      <tr><td class="dempet">Registreringsår</td><td>{{ kj.aar or '–' }} <span class="dempet">(registeret har ikke modellår)</span></td></tr>
+      <tr><td class="dempet">Klasse</td><td>{{ kj.klasse or '–' }}</td></tr>
       <tr><td class="dempet">Karosseri</td><td>{{ kj.karosseri or '–' }}{% if kj.seter %} · {{ kj.seter }} seter{% endif %}</td></tr>
       <tr><td class="dempet">Farge</td><td>{{ kj.farge or '–' }}</td></tr>
       <tr><td class="dempet">Mål</td><td>{% if kj.lengde %}{{ kj.lengde }} × {{ kj.bredde or '?' }} mm{% else %}–{% endif %}</td></tr>
@@ -58,6 +59,7 @@
       <tr><td class="dempet">Effekt</td><td>{% if kj.effekt_kw %}{{ (kj.effekt_kw * 1.36) | round | int }} hk / {{ kj.effekt_kw | round | int }} kW{% else %}–{% endif %}</td></tr>
       {% if kj.slagvolum %}<tr><td class="dempet">Slagvolum</td><td>{{ kj.slagvolum }} cm³</td></tr>{% endif %}
       <tr><td class="dempet">Girkasse</td><td>{{ kj.girkasse or '–' }}</td></tr>
+      {% if kj.drivhjul %}<tr><td class="dempet">Drivhjul</td><td>{{ kj.drivhjul }}</td></tr>{% endif %}
       {% if kj.rekkevidde_km %}<tr><td class="dempet">Rekkevidde (WLTP)</td><td>{{ kj.rekkevidde_km }} km</td></tr>{% endif %}
       {% if kj.euroklasse %}<tr><td class="dempet">Euroklasse</td><td>{{ kj.euroklasse }}</td></tr>{% endif %}
       <tr><td class="dempet">Egenvekt</td><td>{{ kj.egenvekt | kr if kj.egenvekt else '–' }} kg</td></tr>

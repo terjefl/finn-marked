@@ -118,6 +118,8 @@ def normaliser(data: dict, regnr: str | None = None) -> dict:
         "egenvekt": _g(td, "vekter", "egenvekt"),
         "tillatt_totalvekt": _g(td, "vekter", "tillattTotalvekt"),
         "tilhengervekt": _g(td, "vekter", "tillattTilhengervektMedBrems"),
+        "klasse": _g(gen, "tekniskKode", "kodeNavn"),
+        "drivhjul": _g(td, "akslinger", "forbindelseMellomDrivaksler", "kodeNavn"),
         "seter": _g(td, "persontall", "sitteplasserTotalt"),
         "girkasse": _g(td, "motorOgDrivverk", "girkassetype", "kodeNavn"),
         "karosseri": _g(td, "karosseriOgLasteplan", "karosseritype", "kodeNavn"),
@@ -146,10 +148,14 @@ def beskrivelse(kj: dict) -> str:
     # Vegvesenet skriver alt med store bokstaver: VOLKSWAGEN → Volkswagen, men BMW/KIA/MG beholdes.
     deler = [merke.title() if (merke.isupper() and len(merke) > 4) else merke]
     if modell:
-        # «MODEL Y» → «Model Y», men «ID.4», «EV6» og «I4» beholdes som de er.
-        pen = modell.title() if (modell.isupper() and len(modell) > 3 and not any(c.isdigit() for c in modell)) else modell
-        deler.append(pen)
-    if typ and typ.lower() not in modell.lower() and len(typ) <= 30:
+        # Ord for ord: «MODEL 3» → «Model 3», «CADDY» → «Caddy», men «ID.4», «EV6», «I4» og «XC40»
+        # beholdes (ord med tall eller på tre tegn eller færre).
+        ord_ = [o.title() if (o.isupper() and o.isalpha() and len(o) > 3) else o for o in modell.split()]
+        deler.append(" ".join(ord_))
+    # Typebetegnelsen er ofte en intern typekode («2KN», «F3K», «5G») — den sier ingen noe.
+    # Ta den bare med når den ser ut som et navn («M50 xDrive», «Long Range»).
+    er_kode = bool(re.fullmatch(r"[0-9A-Z]{1,4}[0-9A-Z/-]{0,4}", typ)) and not re.search(r"[a-z]", typ)
+    if typ and not er_kode and typ.lower() not in modell.lower() and len(typ) <= 30:
         deler.append(typ)
     if kj.get("aar"):
         deler.append(str(kj["aar"]))

@@ -90,6 +90,10 @@ def test_finn_koder() -> None:
     sjekk("serie-stamme 320D→3-Serie", f("BMW", "320D")["modell"]["navn"], "3-Serie")
     sjekk("serie-stamme IX3→iX-Serie", f("BMW", "IX3")["modell"]["navn"], "iX-Serie")
     sjekk("klasse-stamme EQC", f("MERCEDES-BENZ", "EQC")["modell"]["navn"], "EQC-Klasse")
+    tre[1]["modeller"] += [{"navn": "Caddy Alltrack", "kode": "1.817.2000430"}, {"navn": "Caddy-Serie", "kode": "1.817.2829"}]
+    sjekk("CADDY → Caddy-Serie, ikke Alltrack", f("VOLKSWAGEN", "CADDY")["modell"]["navn"], "Caddy-Serie")
+    tre[1]["modeller"] += [{"navn": "Tiguan Allspace", "kode": "1.817.x"}, {"navn": "Tiguan Allspace R", "kode": "1.817.y"}]
+    sjekk("utvidelse velger korteste", f("VOLKSWAGEN", "TIGUAN")["modell"]["navn"], "Tiguan Allspace")
     sjekk("ukjent modell gir merke + liste", (f("BMW", "Z9")["modell"], len(f("BMW", "Z9")["modeller"])), (None, 4))
     sjekk("ukjent merke", f("Lada", "Niva"), {"merke": None, "modell": None, "modeller": []})
     sjekk("sok_url", finn.sok_url("1.749.8308", 2022, True),

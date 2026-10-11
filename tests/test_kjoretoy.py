@@ -68,6 +68,12 @@ def hoved() -> int:
     sjekk("tilhengervekt", k["tilhengervekt"], 1600)
     sjekk("understellsnummer", k["understellsnummer"], "WBY31AW0X0FL12345")
     sjekk("seter/mål/dekk", (k["seter"], k["lengde"], k["dekk"]), (5, 4783, "245/40R19"))
+    sjekk("typekode holdes ute av beskrivelsen",
+          kjoretoy.beskrivelse({"merke": "VOLKSWAGEN", "modell": "CADDY", "typebetegnelse": "2KN", "aar": 2017}),
+          "Volkswagen Caddy 2017")
+    sjekk("navn-aktig typebetegnelse blir med",
+          kjoretoy.beskrivelse({"merke": "TESLA", "modell": "MODEL 3", "typebetegnelse": "Long Range", "aar": 2021}),
+          "Tesla Model 3 Long Range 2021")
 
     # Feilveier
     for navn, data in (("tomt svar", {"kjoretoydataListe": []}),
