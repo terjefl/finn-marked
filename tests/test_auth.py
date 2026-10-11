@@ -144,7 +144,7 @@ def hoved() -> int:
                                         "sok_tag": "alle", "sok_url": "https://www.finn.no/mobility/search/car?a=1",
                                         "formaal": "kjoper", "krit_maks_pris": "450 000", "krit_maks_km": "60000",
                                         "krit_aar_fra": "2022", "krit_kat": ["Fully Charged"],
-                                        "varsle": "1", "varsel_typer": ["kandidat", "tull"]})
+                                        "varsel_typer": ["kandidat", "tull"]})
             with db.aapen() as con:
                 vk = db.vakt(con, "bmw-i4-2022")
                 sjekk("formål og kriterier lagret", (vk["formaal"], vk["kriterier"]),

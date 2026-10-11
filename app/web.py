@@ -224,6 +224,17 @@ def forside(request: Request, con: sqlite3.Connection = Depends(kon), b: dict = 
     return templates.TemplateResponse(request, "forside.html", {"oversikt": oversikt})
 
 
+def _kanaler(con, b: dict) -> list[str]:
+    """Hvor varslene går for den innloggede: til bruk i skjemaets forklaring."""
+    u = auth.bruker(con, b["id"]) or {}
+    ut = []
+    if u.get("epost") and u.get("varsel_epost", 1) and varsling.smtp_oppsett():
+        ut.append(f"e-post ({u['epost']})")
+    if u.get("pushover") and varsling.pushover_token():
+        ut.append("Pushover")
+    return ut
+
+
 def _brukervalg(con, b: dict) -> list[dict]:
     """Eier-valget i skjemaene — bare admin får velge."""
     return [{"id": u["id"], "navn": u["navn"]} for u in auth.brukere(con) if u["aktiv"]] if auth.er_admin(b) else []
@@ -255,6 +266,7 @@ def ny_vakt(request: Request, url: str | None = None, navn: str = "", slug: str 
         except kjoretoy.Oppslagsfeil:
             pass
     k["brukere"] = _brukervalg(con, b)
+    k["kanaler"] = _kanaler(con, b)
     return templates.TemplateResponse(request, "rediger.html", k)
 
 
@@ -399,6 +411,7 @@ def _skjema_kontekst(v: dict | None) -> dict:
     """Feltene rediger.html viser. `skjema` er flat, så ny/rediger/kopi deler mal."""
     if not v:
         return {"v": None, "kopi": None, "forslag": [], "brukere": [], "varsel_typer": varsling.TYPER,
+            "varsel_forklaring": varsling.FORKLARING,
                 "skjema": {"navn": "", "slug": "", "eier": None, "sok": [], "kategorier": {},
                            "egen_bil": "", "egen_km": "", "regnr": "", "kjoretoy": None,
                            "hentetime": 7, "aktiv": True, "formaal": "", "kriterier": {},
@@ -406,6 +419,7 @@ def _skjema_kontekst(v: dict | None) -> dict:
     sok = [{"tag": s.get("tag") or "", "url": s["url"], "kilde": s.get("kilde") or "finn",
             "auto": (s.get("kilde") or "finn") == sokmod.kilde_fra_url(s["url"])} for s in v["sok"]]
     return {"v": v, "kopi": None, "forslag": [], "brukere": [], "varsel_typer": varsling.TYPER,
+            "varsel_forklaring": varsling.FORKLARING,
             "skjema": {"navn": v["navn"], "slug": v["slug"], "eier": v.get("eier"), "sok": sok,
                        "kategorier": v.get("kategorier") or {}, "egen_bil": v.get("egen_bil") or "",
                        "egen_km": v.get("egen_km") or "", "regnr": v.get("regnr") or "",
@@ -425,6 +439,7 @@ def rediger(request: Request, slug: str, con: sqlite3.Connection = Depends(kon),
     k = _skjema_kontekst(v)
     k["forslag"] = _forslag(con, v)
     k["brukere"] = _brukervalg(con, b)
+    k["kanaler"] = _kanaler(con, b)
     return templates.TemplateResponse(request, "rediger.html", k)
 
 
@@ -439,6 +454,7 @@ def kopier(request: Request, slug: str, til: str = "", con: sqlite3.Connection =
     k["v"], k["kopi"] = None, v
     k["forslag"] = _forslag(con, v)
     k["brukere"] = _brukervalg(con, a)
+    k["kanaler"] = _kanaler(con, a)
     k["skjema"].update({
         "navn": f"{v['navn']} ({mottaker['navn']})" if mottaker else f"{v['navn']} (kopi)",
         "slug": f"{v['slug']}-{sokmod.slugify(mottaker['navn'])}" if mottaker else f"{v['slug']}-kopi",
@@ -496,7 +512,7 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
     db.lagre_vakt(con, {
         "slug": ren, "navn": navn.strip() or ren, "sok": nye_sok, "kategorier": nye_kat,
         "regnr": regnr or None, "kjoretoy": kj, "formaal": formaal, "kriterier": kriterier,
-        "varsling": {"aktiv": bool(varsle), "typer": [t for t in varsel_typer if t in varsling.TYPER]},
+        "varsling": {"aktiv": bool(gyldige_typer := [t for t in varsel_typer if t in varsling.TYPER]), "typer": gyldige_typer},
         "egen_bil": egen_bil or None, "egen_km": int(egen_km) if egen_km.strip().isdigit() else None,
         "hentetime": hentetime, "aktiv": 1 if aktiv else 0,
         "opprettet": eksisterende.get("opprettet") if eksisterende else None,

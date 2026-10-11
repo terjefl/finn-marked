@@ -210,8 +210,9 @@ def hoved() -> int:
         fra = varsling.siste_hendelse_id(con, "kjop")
         innsamling.hent_vakt(con, v_k)
         sjekk("varsling: ingenting nytt → ingen melding", (varsling.etter_henting(con, db.vakt(con, "kjop"), fra), sendt), (None, []))
-        sjekk("varsling: av → ingen plukk", varsling.plukk_hendelser(con, dict(v_k, varsling={"aktiv": False}), 0), [])
-        sjekk("varsling: standardtyper etter formål", varsling.varsling_for({"formaal": "eier"})["typer"], ["egen", "solgt"])
+        sjekk("varsling: av → ingen plukk", varsling.plukk_hendelser(con, dict(v_k, varsling={"typer": []}), 0), [])
+        sjekk("varsling: aldri lagret → forslag, men av", varsling.varsling_for({"formaal": "eier"}), {"aktiv": False, "typer": ["egen", "solgt"]})
+        sjekk("varsling: lagret med typer → på", varsling.varsling_for({"varsling": {"typer": ["ny"]}})["aktiv"], True)
 
         con.close()
     finally:

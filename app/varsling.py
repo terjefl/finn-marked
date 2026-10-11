@@ -32,6 +32,13 @@ TYPER = {
     "solgt": "Biler som blir solgt",
     "ny": "Alle nye annonser",
 }
+FORKLARING = {
+    "kandidat": "En ny annonse (eller en som er lagt ut på nytt) oppfyller kjøpskriteriene dine.",
+    "pris": "Prisen på en annonse er endret. Kjøper: bare kandidater. Eier: hele markedet.",
+    "egen": "En annonse med ditt registreringsnummer eller understellsnummer dukker opp.",
+    "solgt": "En annonse er markert solgt hos FINN.",
+    "ny": "Alle nye annonser i søket, uansett kriterier.",
+}
 STANDARD = {"kjoper": ["kandidat", "pris"], "eier": ["egen", "solgt"]}
 
 
@@ -103,7 +110,10 @@ def varsling_for(v: dict) -> dict:
         except ValueError:
             o = {}
     formaal = v.get("formaal") or "eier"
-    return {"aktiv": bool(o.get("aktiv")), "typer": list(o.get("typer") or STANDARD.get(formaal, []))}
+    if "typer" in o:                                   # lagret eksplisitt: det brukeren krysset av
+        typer = list(o.get("typer") or [])
+        return {"aktiv": bool(typer), "typer": typer}
+    return {"aktiv": False, "typer": list(STANDARD.get(formaal, []))}   # aldri lagret: forslag, men av
 
 
 def plukk_hendelser(con, v: dict, fra_id: int) -> list[dict]:

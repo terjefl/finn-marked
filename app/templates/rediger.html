@@ -120,14 +120,17 @@
 
   <div class="kort">
     <h2 style="margin-top:0">Varsling</h2>
-    <label class="valg"><input type="checkbox" name="varsle" value="1" {{ 'checked' if skjema.varsling.aktiv }}> Varsle meg etter henting når noe har skjedd</label>
-    <div class="filtre" style="margin-top:10px">
+    <p>Bilen hentes fra FINN én gang i døgnet, klokka <strong id="hentetime-vis">{{ skjema.hentetime }}</strong>, og når du trykker
+      «Oppdater nå». Etter hver henting får du <strong>ett varsel</strong>
+      {% if kanaler %}til <strong>{{ kanaler | join(' og ') }}</strong>{% else %}<span style="color:var(--negativ)">— men du har ingen kanal ennå: legg inn e-post under «Konto»</span>{% endif %}
+      hvis noe av dette har skjedd siden sist:</p>
+    <div class="filtre" style="margin-top:4px">
       {% for t, navn in varsel_typer.items() %}
-      <label class="valg"><input type="checkbox" name="varsel_typer" value="{{ t }}" {{ 'checked' if t in skjema.varsling.typer }}> {{ navn }}</label>
+      <label class="valg" title="{{ varsel_forklaring[t] }}"><input type="checkbox" name="varsel_typer" value="{{ t }}" {{ 'checked' if t in skjema.varsling.typer }}> {{ navn }}</label>
       {% endfor %}
     </div>
-    <p class="dempet">Kanalene (e-post, Pushover) velger du under «Konto». Standard for kjøper er kandidater og
-      prisendringer, for eier din egen bil og solgte.</p>
+    <p class="dempet" style="margin-top:8px">Ingen avkryssing = ingen varsler. Skjer det ingenting, sendes ingenting.
+      {% if skjema.formaal == 'kjoper' %}«Kandidater» er annonser som oppfyller kjøpskriteriene over; «prisendringer» gjelder bare kandidatene.{% else %}«Prisendringer» gjelder alle annonser i markedet.{% endif %}</p>
   </div>
 
   <div class="kort" id="egen-bil-kort">
@@ -211,6 +214,8 @@
   }
   document.querySelectorAll('input[name=formaal]').forEach(r => r.addEventListener('change', visFormaal));
   visFormaal();
+  const ht = document.getElementById('hentetime');
+  ht.addEventListener('input', () => { document.getElementById('hentetime-vis').textContent = ht.value; });
 
   // Egen bil fra registreringsnummer
   const regnr = document.getElementById('regnr'), info = document.getElementById('kjoretoy-info');
