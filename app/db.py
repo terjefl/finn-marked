@@ -20,6 +20,14 @@ DATA = Path(os.environ.get("FINN_DATA", "/data"))
 #: sorterer tekstsammenligningen (`tid >= ?`) feil og hendelser forsvinner.
 TIDSFORMAT = "%Y-%m-%d %H:%M:%S"
 
+#: Skjemaversjonen `SKJEMA` under tilsvarer. Nye endringer legges i MIGRERINGER med
+#: et høyere nummer — aldri ved å endre SKJEMA alene.
+SKJEMA_BASELINE = 1
+
+#: Nummererte migreringer: (versjon, [SQL …]). Eksempel:
+#:     (2, ["ALTER TABLE annonser ADD COLUMN farge TEXT"]),
+MIGRERINGER: list[tuple[int, list[str]]] = []
+
 SKJEMA = """
 CREATE TABLE IF NOT EXISTS vakter (
   slug TEXT PRIMARY KEY,
@@ -126,6 +134,26 @@ def base() -> sqlite3.Connection:
 def init() -> None:
     with _lock, base() as con:
         con.executescript(SKJEMA)
+        if not con.execute("PRAGMA user_version").fetchone()[0]:
+            con.execute(f"PRAGMA user_version={SKJEMA_BASELINE}")
+        migrer(con)
+
+
+def migrer(con: sqlite3.Connection) -> None:
+    """Kjører migreringer basen ikke har fått ennå (sporet i `PRAGMA user_version`).
+
+    `CREATE TABLE IF NOT EXISTS` legger ikke til kolonner i en base som alt finnes,
+    så skjemaendringer må skrives som en migrering her — ellers ville en kjørende
+    base manglet kolonnen til evig tid.
+    """
+    versjon = con.execute("PRAGMA user_version").fetchone()[0]
+    for nr, setninger in MIGRERINGER:
+        if nr <= versjon:
+            continue
+        for sql in setninger:
+            con.execute(sql)
+        con.execute(f"PRAGMA user_version={int(nr)}")
+        con.commit()
 
 
 def slett_gammelt(con: sqlite3.Connection, dager: int = 365) -> None:
