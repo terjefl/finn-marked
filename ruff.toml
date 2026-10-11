@@ -1,0 +1,17 @@
+# Lint-oppsett for finn-marked. Kjøres i CI (se .github/workflows/bygg.yml) og lokalt:
+#     .venv/bin/ruff check .
+line-length = 120
+target-version = "py312"
+
+[lint]
+# Feil (E4/E7/E9), ubrukte navn og importsortering. Bevisst smalt: resten av
+# ruff-reglene er en smakssak, og et bredt sett ville gitt støy i CI uten å fange feil.
+select = ["E4", "E7", "E9", "F", "I"]
+ignore = [
+    "E501",  # linjelengde håndheves av formatteren, ikke av lint
+]
+
+[lint.per-file-ignores]
+# Testene og scriptene legger repo-roten på sys.path før de importerer `app`.
+"tests/*" = ["E402"]
+"scripts/*" = ["E402"]
