@@ -5,7 +5,7 @@ name: tester, lint og image
 
 on:
   push:
-    branches: [main]
+    branches: ['**']          # sjekkene på alle grener; image bygges bare fra main (se under)
     paths-ignore: ['**.md']
   pull_request:
   workflow_dispatch:
@@ -31,7 +31,9 @@ jobs:
 
   bygg:
     needs: sjekk
-    if: github.event_name != 'pull_request'
+    # Image bygges og pushes bare fra main — en gren skal kunne testes i CI uten
+    # å overskrive :latest.
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
