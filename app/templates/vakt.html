@@ -10,9 +10,12 @@
     <a href="/vakt/{{ v.slug }}/rediger"><button class="lett">Rediger søk</button></a>
     <a href="/api/vakt/{{ v.slug }}" target="_blank"><button class="lett">JSON</button></a>
     {% if brukervalg %}
-    <form class="inline" method="get" action="/vakt/{{ v.slug }}/kopier" style="display:flex; gap:6px">
-      <select name="til">{% for u in brukervalg %}<option value="{{ u.id }}">{{ u.navn }}</option>{% endfor %}</select>
-      <button class="lett" title="Følg samme bil for valgt bruker">Følg for</button>
+    <form class="inline" method="get" action="/vakt/{{ v.slug }}/kopier">
+      <select name="til" onchange="if (this.value) this.form.submit()" title="Lag samme bil for en annen bruker">
+        <option value="" selected>Følg samme bil for …</option>
+        {% for u in brukervalg %}<option value="{{ u.id }}">{{ u.navn }}</option>{% endfor %}
+      </select>
+      <noscript><button class="lett">Gå</button></noscript>
     </form>
     {% endif %}
   </div>
