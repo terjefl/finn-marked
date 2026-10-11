@@ -136,7 +136,8 @@ input[type=range] { flex:1; min-width:220px; accent-color:var(--aksent); }
 .knapperad form.inline { display:inline-flex; gap:6px; align-items:center; }
 .tabell { overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -4px; padding:0 4px; }
 .tabell table { min-width:100%; }
-td.tid { white-space:nowrap; font-size:12px; line-height:1.3; }
+td.tid { white-space:nowrap; font-size:13px; }
+@media (max-width:640px) { td.tid .klokke { display:block; font-size:12px; } }
 td.tall { white-space:nowrap; }
 .bare-m { display:none; }
 

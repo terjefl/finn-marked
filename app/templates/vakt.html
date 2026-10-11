@@ -181,7 +181,7 @@
   <thead><tr><th>Tid</th><th class="skjul-m">Type</th><th>Hva</th></tr></thead>
   <tbody>
   {% for h in hendelser %}
-    <tr><td class="dempet tid">{{ h.tid[:10] }}<br>{{ h.tid[11:16] }}</td>
+    <tr><td class="dempet tid">{{ h.tid[:10] }}<span class="klokke"> {{ h.tid[11:16] }}</span></td>
         <td class="skjul-m"><span class="pill {% if h.type == 'solgt' %}solgt{% elif h.type == 'egen' %}v2{% elif h.type == 'igjen' %}v1{% endif %}">{{ h.type }}</span></td>
         <td>{% if h.lenke %}<a href="{{ h.lenke }}" target="_blank">{{ h.tekst }}</a>{% else %}{{ h.tekst }}{% endif %}</td></tr>
   {% endfor %}
