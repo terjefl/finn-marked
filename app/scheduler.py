@@ -7,6 +7,7 @@ så en omstart av containeren ikke gir dobbel henting samme dag.
 
 from __future__ import annotations
 
+import logging
 import threading
 import time
 import traceback
@@ -14,8 +15,10 @@ from datetime import datetime
 
 from . import db, innsamling
 
+log = logging.getLogger("finn.scheduler")
+
 INTERVALL = 300  # sekunder mellom hver sjekk
-_state = {"siste_sjekk": None, "siste_feil": None, "siste_resultat": None}
+_state: dict[str, object] = {"siste_sjekk": None, "siste_feil": None, "siste_resultat": None}
 
 
 def status() -> dict:
@@ -23,6 +26,10 @@ def status() -> dict:
 
 
 def start() -> None:
+    # Uten dette havner scheduler-loggene ingen steder: docker logs viser bare det
+    # uvicorn selv skriver, og en vakt som feiler ville vært usynlig.
+    logging.basicConfig(level=logging.INFO,
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     threading.Thread(target=_lokke, daemon=True, name="finn-scheduler").start()
 
 
@@ -48,8 +55,21 @@ def _sjekk() -> None:
             sist = (v.get("sist_hentet") or "")[:10]
             if sist == naa.date().isoformat():
                 continue
-            res = innsamling.hent_vakt(con, v)
-            _state["siste_resultat"] = res
-            innsamling.berik_detaljer(con, v, grense=15)
+            # Én vakt som feiler skal ikke stoppe de andre. Feilen havner i vaktens
+            # egen status, og sporet går til loggen (docker logs).
+            try:
+                res = innsamling.hent_vakt(con, v)
+                _state["siste_resultat"] = res
+                log.info("%s: %s", v["slug"], res.get("status"))
+                innsamling.berik_detaljer(con, v, grense=15)
+            except Exception as e:  # noqa: BLE001 – skal ikke velte de andre vaktene
+                log.exception("vakt %s feilet", v.get("slug"))
+                try:
+                    con.rollback()          # ikke lagre halvferdige data fra feilen
+                    con.execute("UPDATE vakter SET sist_status=? WHERE slug=?",
+                                (f"FEIL: {e}", v["slug"]))
+                    con.commit()
+                except Exception:  # noqa: BLE001
+                    log.exception("kunne ikke skrive feilstatus for %s", v.get("slug"))
     finally:
         con.close()
