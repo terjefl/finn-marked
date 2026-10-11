@@ -104,7 +104,7 @@
   <div class="dempet" style="margin-top:6px">
     {% if v.kjoretoy.forste_registrert %}Først registrert {{ v.kjoretoy.forste_registrert }}{% endif %}
     {% if v.kjoretoy.importland or v.kjoretoy.forste_registrert_norge %} · <strong>bruktimport</strong>{% if v.kjoretoy.importland %} fra {{ v.kjoretoy.importland | capitalize }}{% endif %}, registrert i Norge {{ v.kjoretoy.forste_registrert_norge or '?' }}{% endif %}
-    {% if v.kjoretoy.registrert_paa_eier %} · på deg siden {{ v.kjoretoy.registrert_paa_eier }}{% endif %}
+    {% if v.kjoretoy.registrert_paa_eier %} · på deg siden {{ v.kjoretoy.registrert_paa_eier[:10] }}{% endif %}
     {% if v.kjoretoy.drivstoff %} · {{ v.kjoretoy.drivstoff }}{% endif %}
     {% if v.kjoretoy.effekt_kw %} · {{ (v.kjoretoy.effekt_kw * 1.36) | round | int }} hk{% endif %}
     {% if v.kjoretoy.rekkevidde_km %} · {{ v.kjoretoy.rekkevidde_km }} km rekkevidde{% endif %}

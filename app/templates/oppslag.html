@@ -38,8 +38,8 @@
       {% else %}
       <tr><td class="dempet">Først registrert</td><td>{{ kj.forste_registrert or '–' }}</td></tr>
       {% endif %}
-      <tr><td class="dempet">På nåværende eier siden</td><td>{{ kj.registrert_paa_eier or '–' }}</td></tr>
-      <tr><td class="dempet">Status</td><td>{{ kj.status or '–' }}{% if kj.avregistrert %} (siden {{ kj.avregistrert }}){% endif %}</td></tr>
+      <tr><td class="dempet">På nåværende eier siden</td><td>{{ kj.registrert_paa_eier[:10] if kj.registrert_paa_eier else '–' }}</td></tr>
+      <tr><td class="dempet">Status</td><td>{{ kj.status or '–' }}{% if kj.avregistrert %} (siden {{ kj.avregistrert[:10] }}){% endif %}</td></tr>
       <tr><td class="dempet">EU-kontroll</td><td>{% if kj.eu_frist %}frist <strong>{{ kj.eu_frist }}</strong>{% endif %}{% if kj.eu_sist %} · sist godkjent {{ kj.eu_sist }}{% endif %}{% if not kj.eu_frist and not kj.eu_sist %}–{% endif %}</td></tr>
     </table>
   </div>
