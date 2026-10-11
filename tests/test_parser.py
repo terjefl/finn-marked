@@ -101,6 +101,18 @@ def main() -> int:
     sjekk("privat sted", c["sted"], "Malvik")
     sjekk("privat selger", c["selger"], "Smidig bilhandel")
 
+    # Kategorier utledes av vaktens egne nøkler/visningsnavn (rett 12), ikke av en
+    # hardkodet liste per merke.
+    from app.kilder.finn import kategoriser
+    kat = {"fully": "Fully Charged", "m50": "M50", "edrive40": "eDrive40"}
+    a = {"tittel": "BMW i4 M50 xDrive", "undertittel": "Fully Charged"}
+    sjekk("kategori: nøkkel og navn", kategoriser(a, kat, []), "Fully Charged,M50")
+    sjekk("kategori: nøkkel som eget ord", kategoriser({"tittel": "BMW i4 eDrive40"}, kat, []), "eDrive40")
+    sjekk("kategori: ikke del av annet ord",
+          kategoriser({"tittel": "Superduper bil"}, {"super": "Supercharged"}, []), "")
+    sjekk("kategori: ingen kategorier gir ingen tagger", kategoriser(a, {}, []), "")
+    sjekk("kategori: tag fra søket", kategoriser({"tittel": "BMW i4"}, kat, ["m50"]), "M50")
+
     print()
     if feil:
         print(f"{len(feil)} test(er) feilet: {', '.join(feil)}")

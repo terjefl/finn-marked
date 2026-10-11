@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.request
 from datetime import date
+from functools import lru_cache
 
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/126.0 Safari/537.36")
@@ -107,27 +108,36 @@ def parse_kort(art: str) -> dict | None:
     return a
 
 
-MONSTRE = {
-    "fully": r"fully\s*charged",
-    "super": r"supercharged",
-    "m50": r"\bm50\b",
-    "edrive40": r"edrive\s*40",
-}
+@lru_cache(maxsize=None)
+def _ordmonster(tekst: str) -> re.Pattern[str]:
+    """Kategorimønster: nøkkelen/visningsnavnet som egne ord.
+
+    «Fully Charged» → /fully[\\s._-]*charged/ (skilletegn mellom ordene tillatt),
+    «m50» → /m50/ med ordgrense. Bygges fra vaktens egne kategorier, så nye merker
+    og modeller kan følges uten kodeendring.
+    """
+    deler = [re.escape(del_) for del_ in re.split(r"[^\w]+", (tekst or "").lower()) if del_]
+    if not deler:
+        return re.compile(r"(?!)")               # matcher ingenting
+    return re.compile(r"(?<!\w)" + r"[\s._-]*".join(deler) + r"(?!\w)")
 
 
 def kategoriser(ann: dict, kategorier: dict, sok_tagger: list[str]) -> str:
     """Fritekst-treff i tittel/undertittel + treff fra q=-søket.
 
+    Kategoriene kommer fra vaktens eget skjema (`nokkel = visningsnavn`): en kategori
+    merkes når nøkkelen eller visningsnavnet står som eget ord i annonsekortet.
     q=-søket treffer også beskrivelsen, så en annonse funnet der er en bekreftet
     treff selv om ordet ikke står i kortet.
     """
     tekst = f"{ann.get('tittel') or ''} {ann.get('undertittel') or ''}".lower()
     treff: list[str] = []
-    for nokkel, rx in MONSTRE.items():
-        if re.search(rx, tekst):
-            navn = kategorier.get(nokkel, nokkel)
-            if navn not in treff:
-                treff.append(navn)
+    for nokkel, navn in (kategorier or {}).items():
+        navn = navn or nokkel
+        if navn in treff:
+            continue
+        if _ordmonster(nokkel).search(tekst) or _ordmonster(navn).search(tekst):
+            treff.append(navn)
     for tag in sok_tagger:
         if tag in kategorier and kategorier[tag] not in treff:
             treff.append(kategorier[tag])

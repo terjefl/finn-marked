@@ -31,7 +31,8 @@ auksjon | https://www.auksjonen.no/api/category-search/search?category1=1000&q=i
     <textarea id="kategorier" name="kategorier" style="min-height:90px" placeholder="fully = Fully Charged
 super = Supercharged
 m50 = M50">{{ kat_tekst }}</textarea>
-    <p class="dempet">Nøkkelen matches mot fritekst i tittel/undertittel («fully» → «Fully Charged») og mot søkets tag.</p>
+    <p class="dempet">Nøkkelen og visningsnavnet matches som egne ord mot fritekst i tittel/undertittel
+      («fully» og «Fully Charged» fanger begge «Fully Charged»), og nøkkelen mot søkets tag.</p>
 
     <label for="egen_bil">Egen bil (valgfritt — vises i verdiestimatet)</label>
     <input type="text" id="egen_bil" name="egen_bil" value="{{ v.egen_bil or '' if v else '' }}"

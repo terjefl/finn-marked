@@ -30,7 +30,9 @@ th { color:var(--dempet); font-weight:600; font-size:13px; }
 tr:hover td { background:rgba(127,127,127,.07); }
 .pill { display:inline-block; padding:1px 8px; border-radius:20px; background:rgba(127,127,127,.15);
         font-size:12px; margin-right:5px; }
-.pill.fully { background:rgba(20,128,74,.16); color:var(--positiv); }
+.pill.v0 { background:rgba(20,128,74,.16); color:var(--positiv); }
+.pill.v1 { background:rgba(52,101,164,.16); color:var(--aksent); }
+.pill.v2 { background:rgba(176,124,20,.18); color:var(--tekst); }
 .pill.solgt { background:rgba(192,57,43,.15); color:var(--negativ); }
 input[type=text], input[type=number], input[type=url], textarea {
   width:100%; padding:8px 10px; border:1px solid var(--kant); border-radius:7px;
