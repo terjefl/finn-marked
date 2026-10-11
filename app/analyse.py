@@ -197,27 +197,27 @@ def svg_kurve(annonser: list[dict], egen_km: int | None = None,
     for i in range(5):
         yv = y0 + (y1 - y0) * i / 4
         grid += (f'<line x1="{m}" y1="{sy(yv):.0f}" x2="{bredde-m}" y2="{sy(yv):.0f}" '
-                 f'stroke="var(--border)" stroke-width="1"/>'
+                 f'stroke="var(--kant)" stroke-width="1"/>'
                  f'<text x="{m-8}" y="{sy(yv)+4:.0f}" text-anchor="end" '
-                 f'fill="var(--muted-foreground)" font-size="11">{kr(int(yv))}</text>')
+                 f'fill="var(--dempet)" font-size="11">{kr(int(yv))}</text>')
     for i in range(5):
         xv = x0 + (x1 - x0) * i / 4
         grid += (f'<text x="{sx(xv):.0f}" y="{hoyde-m+18}" text-anchor="middle" '
-                 f'fill="var(--muted-foreground)" font-size="11">{xv/1000:.0f}k km</text>')
+                 f'fill="var(--dempet)" font-size="11">{xv/1000:.0f}k km</text>')
     linje = ""
     if v:
         linje = (f'<line x1="{sx(x0):.0f}" y1="{sy(v["a"]+v["b"]*x0):.0f}" x2="{sx(x1):.0f}" '
-                 f'y2="{sy(v["a"]+v["b"]*x1):.0f}" stroke="var(--muted-foreground)" stroke-width="1.5" '
+                 f'y2="{sy(v["a"]+v["b"]*x1):.0f}" stroke="var(--dempet)" stroke-width="1.5" '
                  f'stroke-dasharray="6 4"/>')
     punkter = "".join(
         f'<a href="{_esc(str(a.get("url") or ""), quote=True)}" target="_blank">'
-        f'<circle cx="{sx(a["km"]):.0f}" cy="{sy(a["pris"]):.0f}" r="5" fill="var(--accent)" '
+        f'<circle cx="{sx(a["km"]):.0f}" cy="{sy(a["pris"]):.0f}" r="5" fill="var(--aksent)" '
         f'opacity=".75"><title>{_esc(_t(a))} — {kr(a["pris"])}, {km_str(a["km"])}</title>'
         f'</circle></a>' for _, _, a in par)
     return (f'<svg viewBox="0 0 {bredde} {hoyde}" style="width:100%;height:auto">{grid}{linje}{punkter}'
-            f'<text x="{bredde/2}" y="{hoyde-6}" text-anchor="middle" fill="var(--muted-foreground)" '
+            f'<text x="{bredde/2}" y="{hoyde-6}" text-anchor="middle" fill="var(--dempet)" '
             f'font-size="12">Kilometerstand</text>'
-            f'<text x="12" y="18" fill="var(--muted-foreground)" font-size="12">Utropspris</text></svg>')
+            f'<text x="12" y="18" fill="var(--dempet)" font-size="12">Utropspris</text></svg>')
 
 
 def svg_historikk(kjoringer: list[dict], bredde: int = 720, hoyde: int = 300, m: int = 58) -> str:
