@@ -1,0 +1,160 @@
+#!/usr/bin/env python3
+"""Tester for brukere, sesjoner, invitasjoner og eierskap.
+
+Kjør: `.venv/bin/python tests/test_auth.py` (trenger fastapi, jinja2, webauthn og httpx).
+
+Selve passkey-kryptografien testes ikke her — py_webauthn sin verifisering byttes ut
+med en stubb, så flyten rundt (utfordring, bruker, sesjon, cookie, eier) kan kjøres
+ende-til-ende uten nettleser.
+"""
+
+from __future__ import annotations
+
+import logging
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+feil: list[str] = []
+
+
+def sjekk(navn: str, faktisk, ventet) -> None:
+    ok = faktisk == ventet
+    print(f"{'OK  ' if ok else 'FEIL'} {navn}: {faktisk!r}" + ("" if ok else f" (ventet {ventet!r})"))
+    if not ok:
+        feil.append(navn)
+
+
+def hoved() -> int:
+    mappe = Path(tempfile.mkdtemp(prefix="finn-auth-"))
+    try:
+        from app import auth, db
+        db.sett_data(mappe)
+        db.init()
+        from fastapi.testclient import TestClient
+
+        from app.web import app
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+
+        # Stubber for py_webauthn: alt som når hit regnes som gyldig.
+        auth.webauthn.verify_registration_response = lambda **k: SimpleNamespace(
+            credential_id=b"cred-" + k["expected_challenge"][:4], credential_public_key=b"pk", sign_count=0)
+        auth.webauthn.verify_authentication_response = lambda **k: SimpleNamespace(new_sign_count=1)
+
+        with TestClient(app, base_url="http://testserver", follow_redirects=False) as c:
+            # Åpent og lukket uten innlogging
+            sjekk("helse åpen", c.get("/helse").status_code, 200)
+            r = c.get("/vakt/ny")
+            sjekk("uinnlogget sendes til logginn", (r.status_code, r.headers["location"]),
+                  (303, "/logginn?videre=%2Fvakt%2Fny"))
+            sjekk("api uten sesjon gir 401", c.get("/api/vakter").status_code, 401)
+            sjekk("tom base: logginn → oppsett", c.get("/logginn").headers["location"], "/oppsett")
+            sjekk("oppsett åpent når tom", c.get("/oppsett").status_code, 200)
+
+            # Vakt fra før flerbruker (uten eier) skal havne hos første admin
+            with db.aapen() as con:
+                db.lagre_vakt(con, {"slug": "gammel", "navn": "Gammel", "sok": [], "kategorier": {}})
+                con.commit()
+
+            # Første admin registrerer seg (stubbet seremoni)
+            r = c.post("/api/auth/registrer/start", json={"modus": "oppsett", "navn": "Terje"})
+            sjekk("registrering start", r.status_code, 200)
+            sjekk("rp-id fra Host", '"id":"testserver"' in r.json()["options"].replace(" ", ""), True)
+            uid = r.json()["utfordring"]
+            r = c.post("/api/auth/registrer/fullfor",
+                       json={"utfordring": uid, "credential": {"id": "x", "response": {"transports": ["internal"]}},
+                             "passkey_navn": "Mac"})
+            sjekk("registrering fullført", r.status_code, 200)
+            sjekk("sesjonscookie satt", auth.SESJON_COOKIE in c.cookies, True)
+            sjekk("utfordring er engangs",
+                  c.post("/api/auth/registrer/fullfor", json={"utfordring": uid, "credential": {}}).status_code, 400)
+            with db.aapen() as con:
+                admin = con.execute("SELECT * FROM brukere").fetchone()
+                sjekk("første bruker er admin", admin["rolle"], "admin")
+                sjekk("gammel vakt fikk eier", db.vakt(con, "gammel")["eier"], admin["id"])
+                sjekk("passkey lagret med navn",
+                      con.execute("SELECT navn, transports FROM passkeys").fetchone()[:], ("Mac", "internal"))
+
+            sjekk("oppsett lukket etterpå", c.get("/oppsett").status_code, 404)
+            sjekk("forside som admin", c.get("/").status_code, 200)
+            sjekk("brukere-siden som admin", c.get("/admin/brukere").status_code, 200)
+            sjekk("konto-siden", c.get("/konto").status_code, 200)
+
+            # Inviter Kari og lag en vakt til henne på forhånd
+            r = c.post("/admin/brukere/ny", data={"navn": "Kari", "epost": "", "rolle": "bruker"})
+            sjekk("ny bruker → lenke", r.status_code == 303 and "lenke=" in r.headers["location"], True)
+            with db.aapen() as con:
+                kari = con.execute("SELECT * FROM brukere WHERE navn='Kari'").fetchone()
+                token = con.execute("SELECT token FROM invitasjoner WHERE bruker_id=?", (kari["id"],)).fetchone()[0]
+            r = c.post("/vakt/lagre", data={"slug": "kari-bil", "navn": "Karis bil", "sok": "",
+                                            "kategorier": "", "egen_bil": "Tesla", "egen_km": "1000",
+                                            "hentetime": "7", "aktiv": "1", "eier": str(kari["id"])})
+            sjekk("admin lager vakt for Kari", r.status_code, 303)
+            with db.aapen() as con:
+                sjekk("vakten eies av Kari", db.vakt(con, "kari-bil")["eier"], kari["id"])
+            sjekk("admin ser Karis vakt", c.get("/vakt/kari-bil").status_code, 200)
+
+            # Kari logger inn via invitasjonen i en annen klient
+            with TestClient(app, base_url="http://testserver", follow_redirects=False) as k:
+                sjekk("invitasjonsside", "Kari" in k.get(f"/invitasjon/{token}").text, True)
+                r = k.post("/api/auth/registrer/start", json={"modus": "invitasjon", "token": token})
+                sjekk("invitasjon start", r.status_code, 200)
+                r = k.post("/api/auth/registrer/fullfor",
+                           json={"utfordring": r.json()["utfordring"], "credential": {"id": "y", "response": {}}})
+                sjekk("invitasjon fullført", r.status_code, 200)
+                sjekk("invitasjon brukt opp", "gjelder ikke lenger" in k.get(f"/invitasjon/{token}").text, True)
+                sjekk("Kari ser egen vakt", k.get("/vakt/kari-bil").status_code, 200)
+                sjekk("Kari ser ikke admins vakt", k.get("/vakt/gammel").status_code, 404)
+                sjekk("Kari kan ikke redigere admins vakt", k.get("/vakt/gammel/rediger").status_code, 404)
+                sjekk("Kari får ikke brukere-siden", k.get("/admin/brukere").status_code, 404)
+                sjekk("Kari kan ikke overskrive admins kortnavn",
+                      k.post("/vakt/lagre", data={"slug": "gammel", "navn": "x", "sok": "", "hentetime": "7"}).status_code, 404)
+                r = k.post("/vakt/lagre", data={"slug": "kari-2", "navn": "Kari 2", "sok": "", "hentetime": "7",
+                                                "eier": str(admin["id"])})
+                with db.aapen() as con:
+                    sjekk("vanlig bruker kan ikke velge eier", db.vakt(con, "kari-2")["eier"], kari["id"])
+                sjekk("api viser bare egne", sorted(v["vakt"]["slug"] for v in k.get("/api/vakter").json()["vakter"]),
+                      ["kari-2", "kari-bil"])
+                r = k.post("/loggut")
+                sjekk("loggut", (r.status_code, r.headers["location"]), (303, "/logginn"))
+                sjekk("etter loggut: avvist", k.get("/konto").status_code, 303)
+
+            # Passkey-innlogging (stubbet) med Karis credential
+            with db.aapen() as con:
+                cid = con.execute("SELECT id FROM passkeys WHERE bruker_id=?", (kari["id"],)).fetchone()[0]
+            with TestClient(app, base_url="http://testserver", follow_redirects=False) as k:
+                r = k.post("/api/auth/logginn/start")
+                sjekk("logginn start", r.status_code, 200)
+                r = k.post("/api/auth/logginn/fullfor", json={"utfordring": r.json()["utfordring"],
+                                                              "credential": {"id": cid}})
+                sjekk("logginn fullført", r.status_code, 200)
+                sjekk("logget inn som Kari", "Kari" in k.get("/konto").text, True)
+                sjekk("ukjent passkey avvist",
+                      k.post("/api/auth/logginn/fullfor",
+                             json={"utfordring": k.post("/api/auth/logginn/start").json()["utfordring"],
+                                   "credential": {"id": "finnes-ikke"}}).status_code, 400)
+
+            # Deaktivering dreper sesjonen
+            c.post(f"/admin/brukere/{kari['id']}/aktiv", data={"aktiv": "0"})
+            with db.aapen() as con:
+                sjekk("deaktivert: ingen sesjoner igjen",
+                      con.execute("SELECT COUNT(*) FROM sesjoner WHERE bruker_id=?", (kari["id"],)).fetchone()[0], 0)
+            sjekk("admin kan ikke deaktivere seg selv",
+                  c.post(f"/admin/brukere/{admin['id']}/aktiv", data={"aktiv": "0"}).status_code, 400)
+    finally:
+        shutil.rmtree(mappe, ignore_errors=True)
+
+    print()
+    if feil:
+        print(f"{len(feil)} test(er) feilet: {', '.join(feil)}")
+        return 1
+    print("alle tester OK")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(hoved())
