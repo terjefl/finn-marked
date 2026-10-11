@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import statistics
+from html import escape as _esc
 
 
 def linjereg(x: list[float], y: list[float]) -> tuple[float, float, float]:
@@ -132,9 +133,10 @@ def svg_kurve(annonser: list[dict], egen_km: int | None = None,
                  f'y2="{sy(v["a"]+v["b"]*x1):.0f}" stroke="var(--muted-foreground)" stroke-width="1.5" '
                  f'stroke-dasharray="6 4"/>')
     punkter = "".join(
-        f'<a href="{a["url"]}" target="_blank"><circle cx="{sx(a["km"]):.0f}" cy="{sy(a["pris"]):.0f}" '
-        f'r="5" fill="var(--accent)" opacity=".75"><title>{_t(a)} — {kr(a["pris"])}, {km_str(a["km"])}'
-        f'</title></circle></a>' for _, _, a in par)
+        f'<a href="{_esc(str(a.get("url") or ""), quote=True)}" target="_blank">'
+        f'<circle cx="{sx(a["km"]):.0f}" cy="{sy(a["pris"]):.0f}" r="5" fill="var(--accent)" '
+        f'opacity=".75"><title>{_esc(_t(a))} — {kr(a["pris"])}, {km_str(a["km"])}</title>'
+        f'</circle></a>' for _, _, a in par)
     return (f'<svg viewBox="0 0 {bredde} {hoyde}" style="width:100%;height:auto">{grid}{linje}{punkter}'
             f'<text x="{bredde/2}" y="{hoyde-6}" text-anchor="middle" fill="var(--muted-foreground)" '
             f'font-size="12">Kilometerstand</text>'
