@@ -71,6 +71,9 @@ def hoved() -> int:
     sjekk("typekode holdes ute av beskrivelsen",
           kjoretoy.beskrivelse({"merke": "VOLKSWAGEN", "modell": "CADDY", "typebetegnelse": "2KN", "aar": 2017}),
           "Volkswagen Caddy 2017")
+    sjekk("kort utstyrsnavn uten tall blir med",
+          kjoretoy.beskrivelse({"merke": "VOLKSWAGEN", "modell": "ID.4", "typebetegnelse": "GTX", "aar": 2023}),
+          "Volkswagen ID.4 GTX 2023")
     sjekk("navn-aktig typebetegnelse blir med",
           kjoretoy.beskrivelse({"merke": "TESLA", "modell": "MODEL 3", "typebetegnelse": "Long Range", "aar": 2021}),
           "Tesla Model 3 Long Range 2021")

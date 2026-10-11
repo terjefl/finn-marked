@@ -154,7 +154,7 @@ def beskrivelse(kj: dict) -> str:
         deler.append(" ".join(ord_))
     # Typebetegnelsen er ofte en intern typekode («2KN», «F3K», «5G») — den sier ingen noe.
     # Ta den bare med når den ser ut som et navn («M50 xDrive», «Long Range»).
-    er_kode = bool(re.fullmatch(r"[0-9A-Z]{1,4}[0-9A-Z/-]{0,4}", typ)) and not re.search(r"[a-z]", typ)
+    er_kode = bool(re.fullmatch(r"[0-9A-Z]{2,5}", typ)) and any(c.isdigit() for c in typ)
     if typ and not er_kode and typ.lower() not in modell.lower() and len(typ) <= 30:
         deler.append(typ)
     if kj.get("aar"):
