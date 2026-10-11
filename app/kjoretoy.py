@@ -87,8 +87,13 @@ def normaliser(data: dict, regnr: str | None = None) -> dict:
         raise Oppslagsfeil("Fant ikke noe kjøretøy med det registreringsnummeret.")
     td = _g(k, "godkjenning", "tekniskGodkjenning", "tekniskeData", default={})
     gen = td.get("generelt") or {}
-    forste = _g(k, "forstegangsregistrering", "registrertForstegangNorgeDato") \
-        or _g(k, "godkjenning", "forstegangsGodkjenning", "forstegangRegistrertDato")
+    # Bruktimporterte biler har to datoer: første registrering i utlandet
+    # (forstegangsGodkjenning.forstegangRegistrertDato) og første i Norge. Bilens alder
+    # er den eldste; den norske vises ved siden av.
+    norge = _g(k, "forstegangsregistrering", "registrertForstegangNorgeDato")
+    opprinnelig = _g(k, "godkjenning", "forstegangsGodkjenning", "forstegangRegistrertDato")
+    datoer = [d for d in (norge, opprinnelig) if d]
+    forste = min(datoer) if datoer else None
     grupper = _g(td, "miljodata", "miljoOgdrivstoffGruppe", default=[]) or []
     drivstoff = [_g(gr, "drivstoffKodeMiljodata", "kodeNavn") for gr in grupper]
     drivstoff = [d for d in drivstoff if d]
@@ -106,6 +111,7 @@ def normaliser(data: dict, regnr: str | None = None) -> dict:
         "typebetegnelse": gen.get("typebetegnelse"),
         "aar": int(forste[:4]) if forste and forste[:4].isdigit() else None,
         "forste_registrert": forste,
+        "forste_registrert_norge": norge if (norge and opprinnelig and norge != opprinnelig) else None,
         "registrert_paa_eier": _g(k, "registrering", "registrertForstegangPaEierskap"),
         "status": _g(k, "registrering", "registreringsstatus", "kodeNavn"),
         "avregistrert": _g(k, "registrering", "avregistrertSidenDato"),

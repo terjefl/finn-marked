@@ -87,6 +87,18 @@ def hoved() -> int:
           kjoretoy.beskrivelse({"merke": "TESLA", "modell": "MODEL 3", "typebetegnelse": "Long Range", "aar": 2021}),
           "Tesla Model 3 Long Range 2021")
 
+    # Bruktimport: første registrering i utlandet er bilens alder
+    imp = {"kjoretoydataListe": [{"kjoretoyId": {"kjennemerke": "BT11614"},
+            "forstegangsregistrering": {"registrertForstegangNorgeDato": "2014-09-23"},
+            "godkjenning": {"forstegangsGodkjenning": {"forstegangRegistrertDato": "2011-06-20",
+                            "bruktimport": {"importland": {"landNavn": "TYSKLAND"}, "kilometerstand": 60185}},
+                            "tekniskGodkjenning": {"tekniskeData": {"generelt": {"merke": [{"merke": "BMW"}], "handelsbetegnelse": ["X5 XDRIVE30D"]}}}}}]}
+    i = kjoretoy.normaliser(imp)
+    sjekk("import: år fra opprinnelig registrering", (i["aar"], i["forste_registrert"], i["forste_registrert_norge"]),
+          (2011, "2011-06-20", "2014-09-23"))
+    sjekk("import: land og km", (i["importland"], i["importert_km"]), ("TYSKLAND", 60185))
+    sjekk("ikke import: ingen norsk dato for seg", k["forste_registrert_norge"], None)
+
     # Feilveier
     for navn, data in (("tomt svar", {"kjoretoydataListe": []}),
                        ("feilmelding", {"feilmelding": "Ugyldig kjennemerke"}),

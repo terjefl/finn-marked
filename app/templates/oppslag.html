@@ -32,7 +32,7 @@
   <div class="kort">
     <h3 style="margin-top:0">Registrering</h3>
     <table>
-      <tr><td class="dempet">Først registrert</td><td>{{ kj.forste_registrert or '–' }}</td></tr>
+      <tr><td class="dempet">Først registrert</td><td>{{ kj.forste_registrert or '–' }}{% if kj.forste_registrert_norge %} <span class="dempet">(i utlandet; i Norge {{ kj.forste_registrert_norge }})</span>{% endif %}</td></tr>
       <tr><td class="dempet">På nåværende eier siden</td><td>{{ kj.registrert_paa_eier or '–' }}</td></tr>
       <tr><td class="dempet">Status</td><td>{{ kj.status or '–' }}{% if kj.avregistrert %} (siden {{ kj.avregistrert }}){% endif %}</td></tr>
       {% if kj.importland %}<tr><td class="dempet">Bruktimport</td><td>{{ kj.importland }}{% if kj.importert_km %}, {{ kj.importert_km | kr }} km ved import{% endif %}</td></tr>{% endif %}
