@@ -25,7 +25,7 @@
 
 <div class="rutenett">
   <div class="kort"><div class="dempet">Til salgs</div><div class="nokkel">{{ filtrert_oppsummering.antall }}</div>
-       <div class="dempet">{{ filtrert_oppsummering.antall_pris }} med utropspris{% if filtrert_oppsummering.antall_bud %} · {{ filtrert_oppsummering.antall_bud }} på auksjon (bud){% endif %}</div></div>
+       <div class="dempet">{{ filtrert_oppsummering.antall_pris }} med utropspris{% if filtrert_oppsummering.antall_bud %} · {{ filtrert_oppsummering.antall_bud }} på auksjon (bud){% endif %}{% if filtrert_oppsummering.antall_urimelig %} · {{ filtrert_oppsummering.antall_urimelig }} med urimelig pris holdt utenfor{% endif %}</div></div>
   <div class="kort"><div class="dempet">Median</div>
        <div class="nokkel">{{ filtrert_oppsummering.median | kr }}</div>
        {% if filtrert_oppsummering.p25 %}<div class="dempet">25/75: {{ filtrert_oppsummering.p25 | kr }} /
@@ -153,7 +153,7 @@
   <tbody>
   {% for a in annonser %}
     <tr>
-      <td class="tall">{{ a.pris | kr }}{% if a.pris_type == 'bud' %} <span class="dempet">bud</span>{% endif %}</td>
+      <td class="tall">{{ a.pris | kr }}{% if a.pris_type == 'bud' %} <span class="dempet">bud</span>{% endif %}{% if a.kilde_id in urimelige %} <span class="pill solgt" title="Urimelig lav — holdt utenfor statistikken">pris?</span>{% endif %}</td>
       <td class="tall">{{ a.km | kr }}</td>
       <td class="skjul-m">{{ a.aar or "–" }}</td>
       <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or "" }}</a>{% if a.kilde_id in igjen %} <span class="pill v2" title="Samme bil har vært ute før">igjen</span>{% endif %}

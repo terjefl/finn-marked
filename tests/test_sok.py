@@ -54,6 +54,24 @@ def hoved() -> int:
            {"undertittel": "M50 · Laser · 2022 · 45 000 km"}, {"undertittel": None}, {"undertittel": "fully charged"}]
     sjekk("kategoriforslag", analyse.kategoriforslag(ann, {"m50": "M50"}), [("Fully Charged", 3), ("Laser", 2)])
     sjekk("kategoriforslag tomt", analyse.kategoriforslag([], {}), [])
+    biler = [{"kilde_id": str(i), "pris": p, "km": 50000, "pris_type": "utropspris"} for i, p in enumerate((450000, 460000, 470000, 480000, 490000, 1857, 9000))]
+    sjekk("urimelige priser", analyse.urimelige(biler), {"5", "6"})
+    sjekk("oppsummer holder dem utenfor", (analyse.oppsummer(biler)["min"], analyse.oppsummer(biler)["antall_urimelig"]), (450000, 2))
+    sjekk("verdikurve regner uten dem", analyse.verdikurve(biler)["n"], 5)
+    sjekk("få annonser: bare gulvet gjelder", analyse.urimelige(biler[:3] + [biler[5]]), {"5"})
+    from app.kilder import finn
+    sjekk("undermodeller: X5 under X-Serie",
+          finn.finn_merke_og_modell("BMW", "X5", [{"navn": "BMW", "kode": "0.749", "param": "variant", "modeller": [
+              {"navn": "X-Serie", "kode": "1.749.2466", "param": "variant"}, {"navn": "i4", "kode": "1.749.8308", "param": "variant"}]}],
+              undermodeller=lambda kode: [{"navn": "X3", "kode": "2.749.2466.7798", "param": "variant"},
+                                          {"navn": "X5", "kode": "2.749.2466.6737", "param": "variant"},
+                                          {"navn": "X5 M", "kode": "2.749.2466.8360", "param": "variant"}])["modell"],
+          {"navn": "X5", "kode": "2.749.2466.6737", "param": "variant"})
+    r = finn.finn_merke_og_modell("BMW", "X9", [{"navn": "BMW", "kode": "0.749", "param": "variant", "modeller": [
+        {"navn": "X-Serie", "kode": "1.749.2466", "param": "variant"}]}],
+        undermodeller=lambda kode: [{"navn": "X5", "kode": "2.749.2466.6737", "param": "variant"}])
+    sjekk("undermodeller: ukjent → serien beholdes, lista er undermodellene",
+          (r["modell"]["navn"], [m["navn"] for m in r["modeller"]]), ("X-Serie", ["Hele X-Serie", "X5"]))
     sjekk("kategoriforslag tak (alle har det)", analyse.kategoriforslag([{"undertittel": "X"}] * 10, {}), [])
 
     test_finn_koder()

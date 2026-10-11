@@ -172,6 +172,7 @@ def _vakt_kontekst(con, slug: str, b: dict) -> dict:
         "hendelser": db.ok(con, "SELECT * FROM hendelser WHERE slug=? ORDER BY id DESC LIMIT 60", (slug,)),
         "liggetid": analyse.liggetid(solgte),
         "egen_ute": _egen_ute(con, v, annonser + solgte),
+        "urimelige": analyse.urimelige(annonser),
         "igjen": {r["kilde_id"] for r in con.execute(
             "SELECT kilde_id FROM annonser WHERE slug=? AND ekstra LIKE '%forrige_kilde_id%'", (slug,))},
     }

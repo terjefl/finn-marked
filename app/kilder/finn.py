@@ -442,8 +442,51 @@ def hent_merketre(tving: bool = False, vertikal: str = "car") -> list[dict]:
     return merker
 
 
+_undermodeller: dict[str, dict] = {}
+
+
+def hent_undermodeller(modellkode: str, vertikal: str = "car") -> list[dict]:
+    """Tredje nivå i FINNs tre: «X-Serie» → X1, X3, X5 … (variant=2.<merke>.<serie>.<kode>).
+    Finnes bare i svaret når serien er valgt, så det er ett ekstra kall, mellomlagret et døgn."""
+    import json as _json
+    cache = _undermodeller.get(modellkode)
+    if cache and time.monotonic() - cache["hentet"] < MERKETRE_LEVETID:
+        return cache["liste"]
+    v = VERTIKALER[vertikal]
+    data = _json.loads(hent(API_SOK_BASE + v["key"] + "?" + urllib.parse.urlencode({v["tre"]: modellkode})))
+    liste: list[dict] = []
+    for m in ({f.get("name"): f for f in data.get("filters") or []}.get(v["tre"]) or {}).get("filter_items") or []:
+        for mo in m.get("filter_items") or []:
+            if mo.get("value") == modellkode:
+                liste = [{"navn": x.get("display_name"), "kode": x.get("value"), "param": v["tre"]}
+                         for x in (mo.get("filter_items") or [])]
+    _undermodeller[modellkode] = {"hentet": time.monotonic(), "liste": liste}
+    return liste
+
+
+def _match_navn(nmo: str, modeller: list[dict]) -> dict | None:
+    """Beste treff for et normalisert navn i en liste: eksakt → FINN-navn som prefiks →
+    -Serie/-Klasse-stamme → korteste utvidelse."""
+    eksakt = [x for x in modeller if _normaliser_navn(x["navn"]) == nmo]
+    if eksakt:
+        return eksakt[0]
+    kand = [x for x in modeller if _normaliser_navn(x["navn"]) and nmo.startswith(_normaliser_navn(x["navn"]))]
+    if kand:
+        return max(kand, key=lambda x: len(x["navn"]))
+    stammer = []
+    for x in modeller:
+        m = re.match(r"^(.+?)[\s-]*(serie|klasse)$", x["navn"], re.I)
+        if m:
+            stammer.append((_normaliser_navn(m.group(1)), x))
+    kand2 = [(st, x) for st, x in stammer if st and nmo.startswith(st)]
+    if kand2:
+        return max(kand2, key=lambda p: len(p[0]))[1]
+    kand = [x for x in modeller if _normaliser_navn(x["navn"]).startswith(nmo)]
+    return min(kand, key=lambda x: len(x["navn"])) if kand else None
+
+
 def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] | None = None,
-                         vertikal: str = "car") -> dict:
+                         vertikal: str = "car", undermodeller=None) -> dict:
     """Mapper Vegvesenets merke/modell («BMW», «I4») til FINNs koder.
 
     Returnerer {merke: {navn,kode}|None, modell: {navn,kode}|None, modeller: [...]} —
@@ -451,6 +494,7 @@ def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] 
     når treffet er usikkert. Modell-match: eksakt normalisert navn, ellers det
     lengste FINN-navnet som er inneholdt i Vegvesenets (eller omvendt).
     """
+    eget_tre = tre is not None
     tre = tre if tre is not None else hent_merketre(vertikal=vertikal)
     nm = _normaliser_navn(merke)
     m_treff = None
@@ -467,34 +511,23 @@ def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] 
         return {"merke": None, "modell": None, "modeller": []}
     modeller = m_treff["modeller"]
     nmo = _normaliser_navn(modell)
-    mo_treff = None
-    if nmo:
-        # 1) Eksakt: «I4» → «i4», «ID.4 GTX» → «ID.4 GTX».
-        eksakt = [x for x in modeller if _normaliser_navn(x["navn"]) == nmo]
-        if eksakt:
-            mo_treff = eksakt[0]
-        # 2) FINN-navnet er et prefiks av Vegvesenets: «ID.4» når Vegvesenet sier «ID.4 GTX»
-        #    (lengste prefiks vinner).
-        if not mo_treff:
-            kand = [x for x in modeller if _normaliser_navn(x["navn"]) and nmo.startswith(_normaliser_navn(x["navn"]))]
-            mo_treff = max(kand, key=lambda x: len(x["navn"])) if kand else None
-        # 3) Serie-/klassenavn: «3-Serie», «Q4-Serie», «Caddy-Serie», «EQC-Klasse» der Vegvesenet
-        #    sier «320D», «Q4 E-TRON», «CADDY», «EQC». Match på stammen foran -Serie/-Klasse.
-        if not mo_treff:
-            stammer = []
-            for x in modeller:
-                m = re.match(r"^(.+?)[\s-]*(serie|klasse)$", x["navn"], re.I)
-                if m:
-                    stammer.append((_normaliser_navn(m.group(1)), x))
-            kand2 = [(st, x) for st, x in stammer if st and nmo.startswith(st)]
-            if kand2:
-                mo_treff = max(kand2, key=lambda p: len(p[0]))[1]
-        # 4) Vegvesenets navn er et prefiks av FINN-navnet: «CADDY» → kortest mulig utvidelse,
-        #    ikke «Caddy Alltrack» når det finnes noe nærmere. Sist, fordi det gjetter mest.
-        if not mo_treff:
-            kand = [x for x in modeller if _normaliser_navn(x["navn"]).startswith(nmo)]
-            mo_treff = min(kand, key=lambda x: len(x["navn"])) if kand else None
+    mo_treff = _match_navn(nmo, modeller) if nmo else None
     param = m_treff.get("param") or "variant"
+    # Traff vi en serie («X-Serie», «3-Serie», «EQC-Klasse») uten at navnet var eksakt, har FINN
+    # ofte et tredje nivå med de enkelte modellene (X5, 320d …). Prøv det, og la skjemaet velge
+    # blant undermodellene i stedet for toppnivået.
+    # (Med et eget tre og uten undermodell-oppslag, som i testene, hoppes dette over.)
+    if mo_treff and nmo and _normaliser_navn(mo_treff["navn"]) != nmo \
+            and re.search(r"[\s-]*(serie|klasse)$", mo_treff["navn"], re.I) and (undermodeller or not eget_tre):
+        try:
+            under = undermodeller(mo_treff["kode"]) if undermodeller else hent_undermodeller(mo_treff["kode"], vertikal)
+        except (RuntimeError, ValueError):
+            under = []
+        if under:
+            u_treff = _match_navn(nmo, under)
+            modeller = [{"navn": f"Hele {mo_treff['navn']}", "kode": mo_treff["kode"], "param": param}] + under
+            if u_treff:
+                mo_treff = u_treff
     return {"merke": {"navn": m_treff["navn"], "kode": m_treff["kode"], "param": param},
             "modell": ({"navn": mo_treff["navn"], "kode": mo_treff["kode"], "param": param} if mo_treff else None),
             "modeller": modeller}

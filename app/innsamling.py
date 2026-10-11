@@ -167,7 +167,9 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
                         f"({rad['km']} km, {_pris(rad['pris'], rad['pris_type'])})",
                         {"pris": rad["pris"], "km": rad["km"], "url": rad["url"], "kilde": rad["kilde"]})
 
-    priser = sorted(a["pris"] for a in alle.values() if a["pris"] and not a["solgt"])
+    from . import analyse
+    ute = analyse.urimelige([dict(a, kilde_id=k[1]) for k, a in alle.items()])
+    priser = sorted(a["pris"] for (_, kid), a in alle.items() if a["pris"] and not a["solgt"] and kid not in ute)
 
     def pct(p: float):
         if not priser:

@@ -53,10 +53,32 @@ def er_utropspris(a: dict) -> bool:
     return (a.get("pris_type") or "utropspris") in ("utropspris", "fastpris")
 
 
-def oppsummer(annonser: list[dict]) -> dict:
+PRIS_GULV = 10_000       # kr: under dette er det aldri en bilpris
+PRIS_FAKTOR = 0.1        # … og under 10 % av medianen er det en månedspris, en feiltasting e.l.
+
+
+def urimelige(annonser: list[dict]) -> set:
+    """Kilde-id-er for annonser med urimelig lav pris: under 10 000 kr, eller under
+    10 % av medianen av utropsprisene. Leasingannonser med månedspris (1 857 kr) og
+    feiltastinger trekker ellers median, kurve og min ned."""
     priser = sorted(a["pris"] for a in annonser if a.get("pris") and er_utropspris(a))
+    grense = PRIS_GULV
+    if len(priser) >= 5:
+        grense = max(grense, statistics.median(priser) * PRIS_FAKTOR)
+    return {a.get("kilde_id") for a in annonser if a.get("pris") and er_utropspris(a) and a["pris"] < grense}
+
+
+def brukbare(annonser: list[dict]) -> list[dict]:
+    """Annonsene uten de urimelige — det statistikken og kurvene regner på."""
+    ut = urimelige(annonser)
+    return [a for a in annonser if a.get("kilde_id") not in ut] if ut else annonser
+
+
+def oppsummer(annonser: list[dict]) -> dict:
+    ute = urimelige(annonser)
+    priser = sorted(a["pris"] for a in annonser if a.get("pris") and er_utropspris(a) and a.get("kilde_id") not in ute)
     kms = sorted(a["km"] for a in annonser if a.get("km"))
-    ut = {"antall": len(annonser), "antall_pris": len(priser),
+    ut = {"antall": len(annonser), "antall_pris": len(priser), "antall_urimelig": len(ute),
           "antall_bud": sum(1 for a in annonser if (a.get("pris_type") == "bud"))}
     if priser:
         ut.update({
@@ -73,6 +95,7 @@ def oppsummer(annonser: list[dict]) -> dict:
 
 def verdikurve(annonser: list[dict], egen_km: int | None = None) -> dict | None:
     """Kurve på utropspriser. Estimatet er utropspris-nivå, ikke oppnådd pris."""
+    annonser = brukbare(annonser)
     par = [(a["km"], a["pris"]) for a in annonser if a.get("km") and a.get("pris") and er_utropspris(a)]
     if len(par) < 5:
         return None
@@ -91,7 +114,7 @@ def verdikurve(annonser: list[dict], egen_km: int | None = None) -> dict | None:
 
 def km_botter(annonser: list[dict], steg: int = 10000) -> list[dict]:
     botter: dict[int, list[int]] = {}
-    for a in annonser:
+    for a in brukbare(annonser):
         if a.get("pris") and a.get("km") is not None and er_utropspris(a):
             nokkel = a["km"] // steg * steg
             botter.setdefault(nokkel, []).append(a["pris"])
@@ -102,7 +125,7 @@ def km_botter(annonser: list[dict], steg: int = 10000) -> list[dict]:
 def nabolag(annonser: list[dict], km: int, vindu: int = 10000) -> dict | None:
     """De sammenlignbare annonsene rundt en gitt kilometerstand — tallet brukeren
     faktisk forholder seg til, i motsetning til regresjonslinja."""
-    n = [a for a in annonser if a.get("km") is not None and a.get("pris")
+    n = [a for a in brukbare(annonser) if a.get("km") is not None and a.get("pris")
          and er_utropspris(a) and abs(a["km"] - km) <= vindu]
     if not n:
         return None
@@ -122,7 +145,7 @@ def historikk(con, slug: str, dager: int = 120) -> list[dict]:
 def svg_kurve(annonser: list[dict], egen_km: int | None = None,
               bredde: int = 720, hoyde: int = 380, m: int = 58) -> str:
     """Pris mot kilometerstand som inline-SVG. Fargelegger kategori hvis satt."""
-    par = [(a["km"], a["pris"], a) for a in annonser
+    par = [(a["km"], a["pris"], a) for a in brukbare(annonser)
            if a.get("km") and a.get("pris") and er_utropspris(a)]
     if not par:
         return "<p>Ingen annonser med både pris og kilometerstand.</p>"
