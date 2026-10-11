@@ -18,7 +18,7 @@
 
 <div class="rutenett">
   <div class="kort"><div class="dempet">Til salgs</div><div class="nokkel">{{ filtrert_oppsummering.antall }}</div>
-       <div class="dempet">{{ filtrert_oppsummering.antall_pris }} med pris</div></div>
+       <div class="dempet">{{ filtrert_oppsummering.antall_pris }} med utropspris{% if filtrert_oppsummering.antall_bud %} · {{ filtrert_oppsummering.antall_bud }} på auksjon (bud){% endif %}</div></div>
   <div class="kort"><div class="dempet">Median</div>
        <div class="nokkel">{{ "{:,.0f}".format(filtrert_oppsummering.median).replace(",", " ") if filtrert_oppsummering.median else "–" }}</div>
        {% if filtrert_oppsummering.p25 %}<div class="dempet">25/75: {{ "{:,.0f}".format(filtrert_oppsummering.p25).replace(",", " ") }} /
