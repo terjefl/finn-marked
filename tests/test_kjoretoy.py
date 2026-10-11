@@ -37,6 +37,9 @@ SVAR = {"kjoretoydataListe": [{
         "motorOgDrivverk": {"utelukkendeElektriskDrift": True, "hybridElektriskKjoretoy": False,
                             "motor": [{"drivstoff": [{"maksNettoEffekt": 400.0}]}]},
         "vekter": {"egenvekt": 2290, "tillattTotalvekt": 2605, "tillattTilhengervektMedBrems": 1600},
+        "persontall": {"sitteplasserTotalt": 5},
+        "dimensjoner": {"lengde": 4783, "bredde": 1852},
+        "dekkOgFelg": {"akselDekkOgFelgKombinasjon": [{"akselDekkOgFelg": [{"dekkdimensjon": "245/40R19"}]}]},
     }}},
 }]}
 
@@ -64,6 +67,7 @@ def hoved() -> int:
     sjekk("eu-frist", k["eu_frist"], "2026-03-18")
     sjekk("tilhengervekt", k["tilhengervekt"], 1600)
     sjekk("understellsnummer", k["understellsnummer"], "WBY31AW0X0FL12345")
+    sjekk("seter/mål/dekk", (k["seter"], k["lengde"], k["dekk"]), (5, 4783, "245/40R19"))
 
     # Feilveier
     for navn, data in (("tomt svar", {"kjoretoydataListe": []}),

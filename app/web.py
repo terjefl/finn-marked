@@ -212,7 +212,8 @@ def ny_vakt(request: Request, url: str | None = None, navn: str = "", slug: str 
     valgt_eier = int(eier) if (auth.er_admin(b) and eier.isdigit()) else b["id"]
     if not url:
         return templates.TemplateResponse(request, "ny.html",
-                                          {"brukere": _brukervalg(con, b), "valgt_eier": valgt_eier})
+                                          {"brukere": _brukervalg(con, b), "valgt_eier": valgt_eier,
+                                           "regnr": regnr.strip().upper()})
     url = sokmod.rens_url(url)
     kilde = sokmod.kilde_fra_url(url)
     k = _skjema_kontekst(None)
@@ -229,6 +230,20 @@ def ny_vakt(request: Request, url: str | None = None, navn: str = "", slug: str 
             pass
     k["brukere"] = _brukervalg(con, b)
     return templates.TemplateResponse(request, "rediger.html", k)
+
+
+@app.get("/oppslag", response_class=HTMLResponse)
+def oppslag(request: Request, regnr: str = "", b: dict = Depends(bruker)):
+    """Raskt oppslag på et registreringsnummer, uten å lage noe. Knappen videre
+    tar nummeret med til «Ny vakt»."""
+    kj, feil = None, None
+    if regnr.strip():
+        try:
+            kj = kjoretoy.slaa_opp(regnr)
+        except kjoretoy.Oppslagsfeil as e:
+            feil = str(e)
+    return templates.TemplateResponse(request, "oppslag.html",
+                                      {"regnr": regnr.strip().upper(), "kj": kj, "feil": feil})
 
 
 @app.get("/api/kjoretoy")

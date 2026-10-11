@@ -23,6 +23,7 @@
     {% if bruker %}
       <a href="/">Oversikt</a>
       <a href="/vakt/ny">Ny vakt</a>
+      <a href="/oppslag">Oppslag</a>
       {% if bruker.rolle == 'admin' %}<a href="/admin/brukere">Brukere</a>{% endif %}
       <a href="/konto" class="meg">{{ bruker.navn }}</a>
       <form class="inline" method="post" action="/loggut"><button class="lett liten">Logg ut</button></form>

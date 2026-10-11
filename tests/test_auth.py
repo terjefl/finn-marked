@@ -102,6 +102,11 @@ def hoved() -> int:
                                             "elektrisk": True, "beskrivelse": "BMW I4 M50 xDrive 2022"}
             finn_kilde.hent_merketre = lambda tving=False: [
                 {"navn": "BMW", "kode": "0.749", "modeller": [{"navn": "i4", "kode": "1.749.8308"}]}]
+            r = c.get("/oppslag", params={"regnr": "eb12345"})
+            sjekk("oppslag-siden", r.status_code == 200 and "BMW I4 M50 xDrive 2022" in r.text
+                  and 'href="/vakt/ny?regnr=EB12345"' in r.text, True)
+            sjekk("oppslag uten regnr", c.get("/oppslag").status_code, 200)
+            sjekk("ny vakt med regnr forhåndsutfylt", 'value="EB12345"' in c.get("/vakt/ny", params={"regnr": "EB12345"}).text, True)
             r = c.get("/api/sokforslag", params={"regnr": "eb12345"}).json()
             sjekk("sokforslag url", r["url"],
                   "https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&fuel=4")

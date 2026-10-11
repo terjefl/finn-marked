@@ -8,7 +8,7 @@
 <form method="get" action="/vakt/ny" class="kort" id="skjema">
   <label for="regnr" style="margin-top:0">Raskest: registreringsnummeret på bilen du vil følge markedet for</label>
   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
-    <input type="text" id="regnr" name="regnr" placeholder="EB12345" autocapitalize="characters" style="max-width:160px">
+    <input type="text" id="regnr" name="regnr" value="{{ regnr or '' }}" placeholder="EB12345" autocapitalize="characters" style="max-width:160px">
     <button type="button" class="lett" id="fra-regnr">Finn søket</button>
     <span class="dempet" id="regnr-info"></span>
   </div>
@@ -109,6 +109,7 @@
   document.getElementById('fra-regnr').addEventListener('click', fraRegnr);
   regnr.addEventListener('change', fraRegnr);
   modell.addEventListener('change', byggUrl);
+  if (regnr.value.trim()) fraRegnr();   // kom fra «Oppslag» med nummeret ferdig utfylt
   url.addEventListener('input', () => {
     if (forslag && !url.value.includes('variant=')) { forslag = null; modellvalg.hidden = true; }
     if (!forslag) document.getElementById('navn').value = '';   // navnet skal komme fra det nye søket

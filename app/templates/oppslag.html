@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block tittel %}Oppslag — FINN-marked{% endblock %}
+{% block innhold %}
+<h1>Oppslag på registreringsnummer</h1>
+<form method="get" action="/oppslag" class="kort" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+  <input type="text" name="regnr" value="{{ regnr }}" placeholder="EB12345" autocapitalize="characters" autofocus
+         style="max-width:200px; font-size:18px; letter-spacing:.06em">
+  <button>Slå opp</button>
+  <span class="dempet">Statens vegvesen · tekniske data, ikke eier eller kilometerstand</span>
+</form>
+
+{% if feil %}<p class="feil">{{ feil }}</p>{% endif %}
+
+{% if kj %}
+<div class="kort bil">
+  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:center">
+    <div>
+      <div class="dempet">{{ kj.regnr }}{% if kj.understellsnummer %} · {{ kj.understellsnummer }}{% endif %}</div>
+      <div style="font-size:22px; font-weight:700; letter-spacing:-.01em">{{ kj.beskrivelse or '(ukjent)' }}</div>
+      <div class="dempet">
+        {% if kj.drivstoff %}{{ kj.drivstoff }}{% endif %}
+        {% if kj.effekt_kw %} · {{ (kj.effekt_kw * 1.36) | round | int }} hk ({{ kj.effekt_kw | round | int }} kW){% endif %}
+        {% if kj.rekkevidde_km %} · {{ kj.rekkevidde_km }} km rekkevidde{% endif %}
+        {% if kj.farge %} · {{ kj.farge | lower }}{% endif %}
+      </div>
+    </div>
+    <a href="/vakt/ny?regnr={{ kj.regnr | urlencode }}" class="knapp-lenke"><button type="button">Sett opp markedsvakt →</button></a>
+  </div>
+</div>
+
+<div class="rutenett">
+  <div class="kort">
+    <h3 style="margin-top:0">Registrering</h3>
+    <table>
+      <tr><td class="dempet">Først registrert</td><td>{{ kj.forste_registrert or '–' }}</td></tr>
+      <tr><td class="dempet">På nåværende eier siden</td><td>{{ kj.registrert_paa_eier or '–' }}</td></tr>
+      <tr><td class="dempet">Status</td><td>{{ kj.status or '–' }}{% if kj.avregistrert %} (siden {{ kj.avregistrert }}){% endif %}</td></tr>
+      {% if kj.importland %}<tr><td class="dempet">Bruktimport</td><td>{{ kj.importland }}{% if kj.importert_km %}, {{ kj.importert_km | kr }} km ved import{% endif %}</td></tr>{% endif %}
+      <tr><td class="dempet">EU-kontroll</td><td>{% if kj.eu_frist %}frist <strong>{{ kj.eu_frist }}</strong>{% endif %}{% if kj.eu_sist %} · sist godkjent {{ kj.eu_sist }}{% endif %}{% if not kj.eu_frist and not kj.eu_sist %}–{% endif %}</td></tr>
+    </table>
+  </div>
+  <div class="kort">
+    <h3 style="margin-top:0">Kjøretøy</h3>
+    <table>
+      <tr><td class="dempet">Merke / modell</td><td>{{ kj.merke or '–' }} {{ kj.modell or '' }}</td></tr>
+      <tr><td class="dempet">Typebetegnelse</td><td>{{ kj.typebetegnelse or '–' }}</td></tr>
+      <tr><td class="dempet">Årsmodell</td><td>{{ kj.aar or '–' }}</td></tr>
+      <tr><td class="dempet">Karosseri</td><td>{{ kj.karosseri or '–' }}{% if kj.seter %} · {{ kj.seter }} seter{% endif %}</td></tr>
+      <tr><td class="dempet">Farge</td><td>{{ kj.farge or '–' }}</td></tr>
+      <tr><td class="dempet">Mål</td><td>{% if kj.lengde %}{{ kj.lengde }} × {{ kj.bredde or '?' }} mm{% else %}–{% endif %}</td></tr>
+      <tr><td class="dempet">Dekk</td><td>{{ kj.dekk or '–' }}</td></tr>
+    </table>
+  </div>
+  <div class="kort">
+    <h3 style="margin-top:0">Drivverk og vekt</h3>
+    <table>
+      <tr><td class="dempet">Drivstoff</td><td>{{ kj.drivstoff or '–' }}{% if kj.hybrid %} (hybrid){% endif %}</td></tr>
+      <tr><td class="dempet">Effekt</td><td>{% if kj.effekt_kw %}{{ (kj.effekt_kw * 1.36) | round | int }} hk / {{ kj.effekt_kw | round | int }} kW{% else %}–{% endif %}</td></tr>
+      {% if kj.slagvolum %}<tr><td class="dempet">Slagvolum</td><td>{{ kj.slagvolum }} cm³</td></tr>{% endif %}
+      <tr><td class="dempet">Girkasse</td><td>{{ kj.girkasse or '–' }}</td></tr>
+      {% if kj.rekkevidde_km %}<tr><td class="dempet">Rekkevidde (WLTP)</td><td>{{ kj.rekkevidde_km }} km</td></tr>{% endif %}
+      {% if kj.euroklasse %}<tr><td class="dempet">Euroklasse</td><td>{{ kj.euroklasse }}</td></tr>{% endif %}
+      <tr><td class="dempet">Egenvekt</td><td>{{ kj.egenvekt | kr if kj.egenvekt else '–' }} kg</td></tr>
+      <tr><td class="dempet">Tillatt totalvekt</td><td>{{ kj.tillatt_totalvekt | kr if kj.tillatt_totalvekt else '–' }} kg</td></tr>
+      <tr><td class="dempet">Tilhenger m/brems</td><td>{{ kj.tilhengervekt | kr if kj.tilhengervekt else '–' }} kg</td></tr>
+    </table>
+  </div>
+</div>
+<p class="dempet">Kilde: Statens vegvesen, tekniske kjøretøyopplysninger. Registreringsnummer er en personopplysning;
+  oppslaget lagres ikke.</p>
+{% endif %}
+{% endblock %}

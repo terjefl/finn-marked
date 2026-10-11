@@ -66,7 +66,9 @@ drift. Cloudflare Access foran tjenesten er uavhengig av dette og kan stå.
 
 ## Egen bil fra registreringsnummer
 
-Skjemaet har et felt for registreringsnummer. «Slå opp» henter kjøretøyet fra
+«Oppslag» i menyen slår opp et registreringsnummer uten å lage noe: merke/modell,
+registrering, EU-kontroll, drivverk, vekter og mål. Knappen «Sett opp markedsvakt»
+tar nummeret med til «Ny vakt». Skjemaet har også et felt for registreringsnummer. «Slå opp» henter kjøretøyet fra
 Statens vegvesens åpne API (enkeltoppslag) og fyller inn «Egen bil»; vakt-siden
 viser merke/modell, første registrering, drivstoff, effekt, rekkevidde og frist for
 EU-kontroll. Kilometerstand finnes ikke der, den tastes fortsatt inn selv.
