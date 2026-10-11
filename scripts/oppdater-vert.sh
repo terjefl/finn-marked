@@ -24,6 +24,9 @@ scp -q "$TARBALL" "$VERT:/tmp/"
 ssh "$VERT" "mkdir -p '$ARBEIDSKOPI' && tar xzf '$TARBALL' -C '$ARBEIDSKOPI' && rm -f '$TARBALL'"
 rm -f "$TARBALL"
 
+echo "== bygger imaget på verten (pull_policy: never i stacken bruker dette)"
+ssh "$VERT" "cd '$ARBEIDSKOPI' && docker build -q -t ghcr.io/terjefl/finn-marked:latest . && docker image inspect ghcr.io/terjefl/finn-marked:latest --format '   image {{.Id}} bygget {{.Created}}'"
+
 if [ -z "$STACK_ID" ]; then
   echo "== ingen stack-id oppgitt — hopper over redeploy."
   echo "   Redeploy stacken i Portainer (Pull and redeploy) eller oppgi id som 2. argument."
