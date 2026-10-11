@@ -30,9 +30,9 @@ templates = Jinja2Templates(directory=str(BASE / "templates"))
 app = FastAPI(title="FINN-marked")
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
-# Hentinger som kjører nå (slug -> siste statuslinje), så UI-et kan vise fremdrift
+# Hentinger som kjører nå (slug -> siste statuslinje), så UI-et kan vise fremdrift.
+# Hvem som faktisk henter holdes i innsamling.hentelaas(), felles med scheduleren.
 _kjorer: dict[str, str] = {}
-_kjorer_aktive: set[str] = set()
 _kjorer_laas = threading.Lock()
 
 
@@ -43,10 +43,12 @@ def _logg_til(slug: str):
     return logg
 
 
-def _hent_bakgrunn(slug: str, detaljer: bool = False) -> None:
-    """Kjører hentingen i en tråd slik at UI-et svarer umiddelbart (ingen blokkering)."""
-
-    def jobb():
+def _hent_jobb(slug: str, detaljer: bool = False) -> None:
+    """Selve hentingen. Kalles i én tråd fra ruta, så UI-et svarer umiddelbart."""
+    with innsamling.hentelaas(slug) as fikk:
+        if not fikk:
+            _logg_til(slug)("En henting kjører alt for denne vakten")
+            return
         con = db.base()
         try:
             v = db.vakt(con, slug)
@@ -69,10 +71,6 @@ def _hent_bakgrunn(slug: str, detaljer: bool = False) -> None:
                 pass
         finally:
             con.close()
-            with _kjorer_laas:
-                _kjorer_aktive.discard(slug)
-
-    threading.Thread(target=jobb, daemon=True, name=f"hent-{slug}").start()
 
 
 def _vakt_kontekst(con, slug: str) -> dict:
@@ -163,7 +161,7 @@ def vakt_side(request: Request, slug: str, kategori: str | None = None, q: str |
             "kategorier": alle_kategorier,
             "q": q or "",
             "kjorer": _kjorer.get(slug),
-            "kjorer_aktiv": slug in _kjorer_aktive,
+            "kjorer_aktiv": innsamling.er_opptatt(slug),
             "i_dag": date.today().isoformat(),
         })
     finally:
@@ -178,12 +176,10 @@ def hent(slug: str, detaljer: str | None = Form(None)):
             raise HTTPException(404, "ukjent vakt")
     finally:
         con.close()
-    with _kjorer_laas:
-        if slug in _kjorer_aktive:
-            return RedirectResponse(f"/vakt/{slug}", status_code=303)
-        _kjorer_aktive.add(slug)
-        _kjorer[slug] = "Henter …"
-    threading.Thread(target=_hent_bakgrunn, args=(slug, bool(detaljer)), daemon=True,
+    if innsamling.er_opptatt(slug):
+        return RedirectResponse(f"/vakt/{slug}", status_code=303)
+    _logg_til(slug)("Henter …")
+    threading.Thread(target=_hent_jobb, args=(slug, bool(detaljer)), daemon=True,
                      name=f"hent-{slug}").start()
     return RedirectResponse(f"/vakt/{slug}", status_code=303)
 

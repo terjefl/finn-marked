@@ -5,12 +5,40 @@ Lageret er felles for alle vakter (se db.py); alt nøkles på (slug, kilde, kild
 
 from __future__ import annotations
 
+import contextlib
 import json
 import statistics
+import threading
 import time
 from datetime import date
 
 from . import db, kilder
+
+#: Vakter som hentes nå. Delt mellom web-ruta («Oppdater nå») og scheduleren, som
+#: ellers kunne hente samme vakt samtidig og skrive over hverandres annonser.
+_aktive: set[str] = set()
+_aktive_laas = threading.Lock()
+
+
+def er_opptatt(slug: str) -> bool:
+    """Kjører det en henting for denne vakten nå?"""
+    with _aktive_laas:
+        return slug in _aktive
+
+
+@contextlib.contextmanager
+def hentelaas(slug: str):
+    """Tar hentelåsen for én vakt. Gir False (uten å låse) hvis den alt er tatt."""
+    with _aktive_laas:
+        if slug in _aktive:
+            yield False
+            return
+        _aktive.add(slug)
+    try:
+        yield True
+    finally:
+        with _aktive_laas:
+            _aktive.discard(slug)
 
 
 def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:

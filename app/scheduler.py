@@ -56,20 +56,25 @@ def _sjekk() -> None:
             if sist == naa.date().isoformat():
                 continue
             # Én vakt som feiler skal ikke stoppe de andre. Feilen havner i vaktens
-            # egen status, og sporet går til loggen (docker logs).
-            try:
-                res = innsamling.hent_vakt(con, v)
-                _state["siste_resultat"] = res
-                log.info("%s: %s", v["slug"], res.get("status"))
-                innsamling.berik_detaljer(con, v, grense=15)
-            except Exception as e:  # noqa: BLE001 – skal ikke velte de andre vaktene
-                log.exception("vakt %s feilet", v.get("slug"))
+            # egen status, og sporet går til loggen (docker logs). Hentelåsen er felles
+            # med «Oppdater nå»-knappen, så planlagt og manuell henting ikke kolliderer.
+            with innsamling.hentelaas(v["slug"]) as fikk:
+                if not fikk:
+                    log.info("%s: hopper over — en henting kjører alt", v["slug"])
+                    continue
                 try:
-                    con.rollback()          # ikke lagre halvferdige data fra feilen
-                    con.execute("UPDATE vakter SET sist_status=? WHERE slug=?",
-                                (f"FEIL: {e}", v["slug"]))
-                    con.commit()
-                except Exception:  # noqa: BLE001
-                    log.exception("kunne ikke skrive feilstatus for %s", v.get("slug"))
+                    res = innsamling.hent_vakt(con, v)
+                    _state["siste_resultat"] = res
+                    log.info("%s: %s", v["slug"], res.get("status"))
+                    innsamling.berik_detaljer(con, v, grense=15)
+                except Exception as e:  # noqa: BLE001 – skal ikke velte de andre vaktene
+                    log.exception("vakt %s feilet", v.get("slug"))
+                    try:
+                        con.rollback()          # ikke lagre halvferdige data fra feilen
+                        con.execute("UPDATE vakter SET sist_status=? WHERE slug=?",
+                                    (f"FEIL: {e}", v["slug"]))
+                        con.commit()
+                    except Exception:  # noqa: BLE001
+                        log.exception("kunne ikke skrive feilstatus for %s", v.get("slug"))
     finally:
         con.close()
