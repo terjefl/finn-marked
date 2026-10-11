@@ -15,7 +15,7 @@
 
 <div class="kort">
   <div class="tabell"><table>
-    <thead><tr><th>Navn</th><th>Rolle</th><th>Passkeys</th><th>Markeder</th><th>Sist innlogget</th><th></th></tr></thead>
+    <thead><tr><th>Navn</th><th>Rolle</th><th>Passkeys</th><th>Følger</th><th>Sist innlogget</th><th></th></tr></thead>
     <tbody>
     {% for b in brukere %}
       <tr{% if not b.aktiv %} class="dempet"{% endif %}>
@@ -27,7 +27,7 @@
         <td class="dempet">{{ b.sist_innlogget or '–' }}</td>
         <td style="white-space:nowrap">
           <form class="inline" method="post" action="/admin/brukere/{{ b.id }}/inviter"><button class="lett liten">Ny invitasjon</button></form>
-          <a href="/vakt/ny?eier={{ b.id }}"><button class="lett liten" type="button">Nytt marked</button></a>
+          <a href="/vakt/ny?eier={{ b.id }}"><button class="lett liten" type="button">Følg bil for</button></a>
           {% if b.id != bruker.id %}
           <form class="inline" method="post" action="/admin/brukere/{{ b.id }}/aktiv">
             <input type="hidden" name="aktiv" value="{{ 0 if b.aktiv else 1 }}">
@@ -51,7 +51,7 @@
     </div>
     <button style="margin-top:12px">Opprett og lag invitasjonslenke</button>
   </form>
-  <p class="dempet">Brukeren får ikke e-post fra tjenesten — du sender lenken selv. Vil du ha markedet klart
-    før hen logger inn, trykk «Nytt marked» på raden etterpå.</p>
+  <p class="dempet">Brukeren får ikke e-post fra tjenesten — du sender lenken selv. Vil du ha bilen klar
+    før hen logger inn, trykk «Følg bil for» på raden etterpå.</p>
 </div>
 {% endblock %}

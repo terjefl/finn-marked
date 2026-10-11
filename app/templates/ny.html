@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block tittel %}Følg marked — FINN-marked{% endblock %}
 {% block innhold %}
-<h1>Følg et nytt marked</h1>
+<h1>Følg en ny bil</h1>
 <p class="dempet">Gjør søket på finn.no (merke, modell, årsmodell, det du vil følge), kopier adressen fra
   adressefeltet og lim den inn her. Appen sjekker søket med en gang og foreslår navn.</p>
 
 <form method="get" action="/vakt/ny" class="kort" id="skjema">
-  <label for="regnr" style="margin-top:0">Raskest: registreringsnummeret på bilen du vil følge markedet for</label>
+  <label for="regnr" style="margin-top:0">Raskest: registreringsnummeret på bilen du vil følge</label>
   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
     <input type="text" id="regnr" name="regnr" value="{{ regnr or '' }}" placeholder="EB12345" autocapitalize="characters" style="max-width:160px">
     <button type="button" class="lett" id="fra-regnr">Finn søket</button>
@@ -31,7 +31,7 @@
     <button type="button" class="lett" id="sjekk">Sjekk søket</button>
   </div>
   {% if brukere %}
-  <label for="eier">Markedet følges av</label>
+  <label for="eier">Følges av</label>
   <select id="eier" name="eier">
     {% for b in brukere %}<option value="{{ b.id }}" {% if b.id == valgt_eier %}selected{% endif %}>{{ b.navn }}{% if b.id == bruker.id %} (deg){% endif %}</option>{% endfor %}
   </select>

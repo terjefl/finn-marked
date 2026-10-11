@@ -12,7 +12,7 @@
     {% if brukervalg %}
     <form class="inline" method="get" action="/vakt/{{ v.slug }}/kopier" style="display:flex; gap:6px">
       <select name="til">{% for u in brukervalg %}<option value="{{ u.id }}">{{ u.navn }}</option>{% endfor %}</select>
-      <button class="lett" title="Samme marked for valgt bruker">Lag for</button>
+      <button class="lett" title="Følg samme bil for valgt bruker">Følg for</button>
     </form>
     {% endif %}
   </div>

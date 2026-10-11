@@ -5,7 +5,7 @@ søkeresultatet fra kildene, lagrer hver annonse med pris-historikk, og viser
 endringer, salgstakt og verdikurve i et webgrensesnitt.
 
 Bygget for å kunne følge flere markeder samtidig (flere biler, ulike modeller) —
-hver **vakt** (i UI-et: et «marked» du følger) er ett marked med ett eller flere søk,
+hver **vakt** (i UI-et: en bil du følger) er ett marked med ett eller flere søk,
 og hvert søk navngir sin **kilde**. Nye plattformer legges til som en adapter i `app/kilder/`.
 
 ## Hva den gjør
@@ -52,7 +52,7 @@ Touch ID, Face ID, Windows Hello, sikkerhetsnøkkel) — ingen passord i det hel
 * **Invitere:** «Brukere» i menyen (admin) → navn → «Opprett og lag invitasjonslenke».
   Lenken er gyldig i 7 dager og kan brukes én gang; brukeren åpner den og lager sin
   egen passkey. Tjenesten sender ikke e-post, du sender lenken selv.
-* **Marked klart før første innlogging:** «Nytt marked» på brukerens rad, eller «Lag for»
+* **Bil klar før første innlogging:** «Følg bil for» på brukerens rad, eller «Følg for»
   på en vakt du alt har (søk og kategorier blir med, du fyller inn bilen og km).
   Vakten henter med en gang, så tallene er på plass når brukeren logger inn.
 * **Flere enheter:** «Konto» → «Lag passkey» på hver enhet du vil logge inn fra.
@@ -71,7 +71,7 @@ drift. Cloudflare Access foran tjenesten er uavhengig av dette og kan stå.
 
 «Oppslag» i menyen slår opp et registreringsnummer uten å lage noe: merke/modell,
 registrering, EU-kontroll, drivverk, vekter og mål. Knappen «Sett opp markedsvakt»
-tar nummeret med til «Følg marked». Skjemaet har også et felt for registreringsnummer. «Slå opp» henter kjøretøyet fra
+tar nummeret med til «Følg bil». Skjemaet har også et felt for registreringsnummer. «Slå opp» henter kjøretøyet fra
 Statens vegvesens åpne API (enkeltoppslag) og fyller inn «Egen bil»; vakt-siden
 viser merke/modell, første registrering, drivstoff, effekt, rekkevidde og frist for
 EU-kontroll. Kilometerstand finnes ikke der, den tastes fortsatt inn selv.
@@ -90,7 +90,7 @@ Den tidligere endringsstrømmen for ekstern varsling er fjernet.
 GET /api/vakter                              egne vakter + nøkkeltall (admin: alle)
 GET /api/vakt/<slug>                         full markedsdata for én vakt
 GET /api/vakt/<slug>/annonser.json           annonser (valgfritt ?kategori=)
-GET /api/forhandsvis?url=…                   første side av et søk (til «Følg marked»)
+GET /api/forhandsvis?url=…                   første side av et søk (til «Følg bil»)
 GET /api/kjoretoy?regnr=…                    egen bil fra Statens vegvesen
 GET /api/sokforslag?regnr=…                  FINN-søk foreslått fra registreringsnummer
 GET /helse                                   helsesjekk (Docker healthcheck) + scheduler-tilstand, åpen
@@ -142,7 +142,7 @@ python3 tests/test_kjoretoy.py
 
 ## Nye vakter: søk og kategorier
 
-«Følg marked» er to steg. Raskest er å skrive inn **registreringsnummeret** på bilen:
+«Følg bil» er to steg. Raskest er å skrive inn **registreringsnummeret** på bilen:
 Vegvesenet gir merke, modell og årsmodell, FINNs merke-/modelltre (JSON-API-et bak
 søkesiden, mellomlagret et døgn) gir koden, og appen lager søket
 `variant=<kode>&year_from=<år>&year_to=<år>` (pluss `fuel=4` for elbil). Treffer ikke
@@ -183,5 +183,5 @@ Bare annonser og prispunkter for `--slug` importeres.
 2. Normaliser annonsene til felles-formatet i `app/kilder/__init__.py`.
 3. Registrer klassen med `registrer(...)` nederst i modulen.
 4. Legg vertsnavnet inn i `sok.kilde_fra_url` og `sok.sjekk_url`, og gi modulen en
-   `forhandsvis(url)` (se `finn.py`) så «Følg marked» kan vise første side. Kilden kan
+   `forhandsvis(url)` (se `finn.py`) så «Følg bil» kan vise første side. Kilden kan
    også velges eksplisitt per søkerad i skjemaet.

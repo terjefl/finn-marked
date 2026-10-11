@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block tittel %}{{ 'Rediger marked' if v else 'Følg marked' }} — FINN-marked{% endblock %}
 {% block innhold %}
-<h1>{% if kopi %}Samme marked som «{{ kopi.navn }}»{% elif v %}Rediger marked{% else %}Følg et nytt marked{% endif %}</h1>
+<h1>{% if kopi %}Følg samme bil som «{{ kopi.navn }}»{% elif v %}Rediger{% else %}Følg en ny bil{% endif %}</h1>
 {% if kopi %}<p class="dempet">Søk, kategorier og hentetid er kopiert. Fyll inn eierens bil og kilometerstand,
-  så er markedet klart når hen logger inn. Det henter selv, uavhengig av originalen.</p>{% endif %}
+  så er bilen klar når hen logger inn. Den henter selv, uavhengig av originalen.</p>{% endif %}
 
 <form method="post" action="/vakt/lagre" id="skjema">
   <div class="kort">
     <div class="rutenett skjema">
-      <div><label for="navn" style="margin-top:0">Navn på markedet</label>
+      <div><label for="navn" style="margin-top:0">Navn</label>
         <input type="text" id="navn" name="navn" required value="{{ skjema.navn }}" placeholder="BMW i4 2022"></div>
       <div><label for="slug" style="margin-top:0">Kortnavn (i adressen — bokstaver, tall, bindestrek)</label>
         <input type="text" id="slug" name="slug" required value="{{ skjema.slug }}" placeholder="bmw-i4-2022"
@@ -24,7 +24,7 @@
 
   <div class="kort">
     <h2 style="margin-top:0">Søk</h2>
-    <p class="dempet">Ett marked kan ha flere søk, også fra flere kilder. Taggen merkes på annonsene søket finner
+    <p class="dempet">En bil du følger kan ha flere søk, også fra flere kilder. Taggen merkes på annonsene søket finner
       og brukes til kategorisering — et FINN-søk med <code>q=fully</code> og tag <code>fully</code> gir
       kategorien «Fully Charged» også når ordet bare står i beskrivelsen.</p>
     <div id="sok-rader">
@@ -114,12 +114,12 @@
 
 {% if v and not kopi %}
 <form method="post" action="/vakt/{{ v.slug }}/slett" style="margin-top:26px"
-      onsubmit="return confirm('Slutte å følge markedet? Kryss av under for å slette historikken også.')">
+      onsubmit="return confirm('Slutte å følge denne bilen? Kryss av under for å slette historikken også.')">
   <div class="kort">
-    <h3 style="margin-top:0">Slutt å følge markedet</h3>
+    <h3 style="margin-top:0">Slutt å følge</h3>
     <label><input type="checkbox" name="data" value="1" style="width:auto">
-      Slett også alle annonser, prisendringer og historikk for dette markedet</label>
-    <p class="dempet">Uten kryss beholdes historikken i basen, men markedet fjernes fra oversikten.</p>
+      Slett også alle annonser, prisendringer og historikk for denne bilen</label>
+    <p class="dempet">Uten kryss beholdes historikken i basen, men bilen fjernes fra oversikten.</p>
   </div>
   <button class="fare" type="submit">Slutt å følge</button>
 </form>

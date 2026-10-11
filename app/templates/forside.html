@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block tittel %}Oversikt — FINN-marked{% endblock %}
 {% block innhold %}
-<h1>Markedene dine</h1>
+<h1>Biler du følger</h1>
 <p class="dempet">
-  Et marked er alt som er til salgs av en bil du følger, for eksempel alle BMW i4 fra 2022. Det hentes
+  Når du følger en bil, for eksempel BMW i4 2022, ser du alt som er til salgs av den: priser, salg og verdikurve. Det hentes
   automatisk én gang i døgnet, og kan oppdateres manuelt når som helst.
 </p>
 
@@ -43,9 +43,9 @@
 {% else %}
 <div class="kort tom">
   {% include "ikon/illustrasjon.svg" %}
-  <h2 style="margin-top:0">Du følger ingen markeder ennå</h2>
-  <p class="dempet">Lim inn et søk fra finn.no, så følger appen markedet for deg: priser, salg og verdikurve.</p>
-  <a href="/vakt/ny" class="knapp-lenke"><button>Følg et marked</button></a>
+  <h2 style="margin-top:0">Du følger ingen biler ennå</h2>
+  <p class="dempet">Skriv inn et registreringsnummer eller lim inn et søk fra finn.no, så følger appen bilen for deg.</p>
+  <a href="/vakt/ny" class="knapp-lenke"><button>Følg en bil</button></a>
 </div>
 {% endfor %}
 {% endblock %}
