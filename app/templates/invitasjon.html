@@ -17,7 +17,7 @@
   {% endif %}
 </div>
 {% if inv %}
-<script src="/static/passkey.js"></script>
+<script src="/static/passkey.js?v={{ statisk_versjon }}"></script>
 <script>
 passkey.knytt(document.getElementById('knapp'), () => passkey.registrer({
   modus: 'invitasjon', token: {{ inv.token | tojson }},

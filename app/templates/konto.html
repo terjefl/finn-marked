@@ -70,7 +70,7 @@
   </div>
   <p class="feil" id="feil"></p>
 </div>
-<script src="/static/passkey.js"></script>
+<script src="/static/passkey.js?v={{ statisk_versjon }}"></script>
 <script>
 passkey.knytt(document.getElementById('knapp'), () => passkey.registrer({
   modus: 'konto', passkey_navn: document.getElementById('pknavn').value,

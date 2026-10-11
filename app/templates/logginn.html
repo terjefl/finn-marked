@@ -11,6 +11,6 @@
   <p class="dempet">Har du ikke passkey her ennå? Åpne invitasjonslenken du fikk, eller logg inn på en
     enhet der du har passkey og legg til denne under «Konto».</p>
 </div>
-<script src="/static/passkey.js"></script>
+<script src="/static/passkey.js?v={{ statisk_versjon }}"></script>
 <script>passkey.knytt(document.getElementById('knapp'), () => passkey.logginn(), {{ videre | tojson }});</script>
 {% endblock %}

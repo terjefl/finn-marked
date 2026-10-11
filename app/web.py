@@ -62,6 +62,10 @@ app = FastAPI(title="FINN-marked", lifespan=levetid)
 templates = Jinja2Templates(directory=str(BASE / "templates"), context_processors=[_malkontekst])
 # Malene skrev «"{:,.0f}".format(x).replace(",", " ")» overalt. analyse.kr gjør
 # nøyaktig det samme (og gir «–» for tomt), så den registreres som filter.
+# Versjonsnummer på statiske filer, så nettleseren ikke henger på et gammelt stilark
+# etter deploy (filene har ingen cache-regler, og nettlesere gjetter da levetid selv).
+templates.env.globals["statisk_versjon"] = str(max(
+    int(p.stat().st_mtime) for p in (BASE / "static").rglob("*") if p.is_file()))[-6:]
 templates.env.filters["kr"] = analyse.kr
 templates.env.filters["km"] = analyse.km_str
 templates.env.filters["dager"] = analyse.dager_mellom

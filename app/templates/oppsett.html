@@ -20,7 +20,7 @@
   <button id="knapp" style="width:100%; margin-top:14px">Lag passkey</button>
   <p class="feil" id="feil"></p>
 </div>
-<script src="/static/passkey.js"></script>
+<script src="/static/passkey.js?v={{ statisk_versjon }}"></script>
 <script>
 passkey.knytt(document.getElementById('knapp'), () => passkey.registrer({
   modus: 'oppsett',
