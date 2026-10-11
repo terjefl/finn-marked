@@ -1,19 +1,28 @@
 {% extends "base.html" %}
 {% block tittel %}Oversikt — FINN-marked{% endblock %}
 {% block innhold %}
-<h1>Biler du følger</h1>
+<div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap">
+  <h1>{{ 'Alle biler som følges' if vis_alle else 'Biler du følger' }}</h1>
+  {% if bruker.rolle == 'admin' and andre %}
+  <a href="{{ '/' if vis_alle else '/?alle=1' }}" class="knapp-lenke"><button class="lett liten" type="button">
+    {{ 'Vis bare mine' if vis_alle else 'Vis også andres (' ~ andre ~ ')' }}</button></a>
+  {% endif %}
+</div>
 <p class="dempet">
   Når du følger en bil, for eksempel BMW i4 2022, ser du alt som er til salgs av den: priser, salg og verdikurve. Det hentes
   automatisk én gang i døgnet, og kan oppdateres manuelt når som helst.
 </p>
 
 {% for r in oversikt %}
+{% if vis_alle and (loop.first or r.eier != loop.previtem.eier) %}
+<h2 style="margin:22px 0 8px">{{ 'Mine' if r.egen else r.eier }}</h2>
+{% endif %}
 <div class="kort vakt-kort">
   <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap">
     <div>
       <a class="navn" style="font-size:17px" href="/vakt/{{ r.v.slug }}">{{ r.v.navn }}</a>
       {% if not r.v.aktiv %}<span class="pill">av</span>{% endif %}
-      {% if r.eier %}<span class="pill">{{ r.eier }}</span>{% endif %}
+      {% if r.eier and not r.egen %}<span class="pill">{{ r.eier }}</span>{% endif %}
       <span class="pill {{ 'v0' if r.v.formaal == 'kjoper' else 'v1' }}">{{ 'kjøper' if r.v.formaal == 'kjoper' else 'eier' }}</span>
       {% if r.v.egen_bil %}<div class="dempet">{{ r.v.egen_bil }}{% if r.v.egen_km %} · {{ "{:,}".format(r.v.egen_km).replace(",", " ") }} km{% endif %}</div>{% endif %}
     </div>

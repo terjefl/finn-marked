@@ -212,10 +212,17 @@ def helse(con: sqlite3.Connection = Depends(kon)):
 
 
 @app.get("/", response_class=HTMLResponse)
-def forside(request: Request, con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+def forside(request: Request, alle: str = "", con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+    """Egne biler som standard. Admin kan vise alle brukeres med ?alle=1, gruppert per eier."""
     oversikt = []
+    vis_alle = auth.er_admin(b) and alle == "1"
     eiere = {u["id"]: u["navn"] for u in auth.brukere(con)} if auth.er_admin(b) else {}
-    for v in db.vakter(con, eier=None if auth.er_admin(b) else b["id"]):
+    andre = (con.execute("SELECT COUNT(*) c FROM vakter WHERE eier IS NOT ? ", (b["id"],)).fetchone()["c"]
+             if auth.er_admin(b) else 0)
+    vakter = db.vakter(con, eier=None if vis_alle else b["id"])
+    if vis_alle:
+        vakter.sort(key=lambda v: (v.get("eier") != b["id"], (eiere.get(v.get("eier")) or "").lower(), v["navn"].lower()))
+    for v in vakter:
         annonser = db.ok(con, "SELECT * FROM annonser WHERE slug=? AND aktiv=1 AND solgt=0", (v["slug"],))
         solgte = con.execute("SELECT COUNT(*) c FROM annonser WHERE slug=? AND solgt=1",
                              (v["slug"],)).fetchone()["c"]
@@ -224,8 +231,9 @@ def forside(request: Request, con: sqlite3.Connection = Depends(kon), b: dict = 
                           (v["slug"],)).fetchone()["c"]
         oversikt.append({"v": v, "oppsummering": analyse.oppsummer(annonser),
                          "solgte": solgte, "nye_uke": nye, "status": _kjorer.get(v["slug"]),
-                         "eier": eiere.get(v.get("eier"))})
-    return templates.TemplateResponse(request, "forside.html", {"oversikt": oversikt})
+                         "eier": eiere.get(v.get("eier")), "egen": v.get("eier") == b["id"]})
+    return templates.TemplateResponse(request, "forside.html",
+                                      {"oversikt": oversikt, "vis_alle": vis_alle, "andre": andre})
 
 
 def _kanaler(con, b: dict) -> dict:

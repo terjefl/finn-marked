@@ -189,6 +189,9 @@ def hoved() -> int:
                 sjekk("vakten eies av Kari", db.vakt(con, "kari-bil")["eier"], kari["id"])
                 sjekk("formål blir eier av seg selv når egen km er satt", db.vakt(con, "kari-bil")["formaal"], "eier")
             sjekk("admin ser Karis vakt", c.get("/vakt/kari-bil").status_code, 200)
+            sjekk("forsiden viser bare egne som standard", "kari-bil" in c.get("/").text, False)
+            sjekk("forsiden kan vise alle", "kari-bil" in c.get("/?alle=1").text and "Vis bare mine" in c.get("/?alle=1").text, True)
+            sjekk("knappen teller andres", "Vis også andres (1)" in c.get("/").text, True)
             r = c.get("/vakt/bmw-i4-2022/kopier", params={"til": kari["id"]})
             sjekk("kopi til Kari forhåndsutfylt",
                   'value="BMW i4 2022 (endret) (Kari)"' in r.text and 'value="bmw-i4-2022-kari"' in r.text
