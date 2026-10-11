@@ -125,10 +125,53 @@ input[type=range] { flex:1; min-width:220px; accent-color:var(--aksent); }
 .vakt-kort .navn { font-size:18px; letter-spacing:-.01em; text-decoration:none; color:var(--tekst); }
 .vakt-kort .navn:hover { color:var(--aksent); }
 
+/* ---------- knapperader og scroll-tabeller */
+.knapperad { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.knapperad form.inline { display:inline-flex; gap:6px; align-items:center; }
+.tabell { overflow-x:auto; -webkit-overflow-scrolling:touch; margin:0 -4px; padding:0 4px; }
+.tabell table { min-width:100%; }
+td.tid { white-space:nowrap; font-size:12px; line-height:1.3; }
+td.tall { white-space:nowrap; }
+.bare-m { display:none; }
+
+/* ---------- nettbrett */
+@media (min-width:641px) and (max-width:1024px) {
+  main { padding:22px 18px; }
+  .rutenett { gap:12px; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); }
+  .rutenett.skjema { grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); }
+}
+
+/* ---------- mobil */
 @media (max-width:640px) {
-  main { padding:18px 14px; }
-  header { padding:10px 14px; }
+  body { padding-bottom:env(safe-area-inset-bottom); }
+  main { padding:16px 14px; }
+  header { padding:8px 12px 6px; gap:4px; flex-wrap:wrap; }
+  .logo { white-space:nowrap; font-size:16px; gap:8px; }
+  .logo img { width:26px; height:26px; }
   .logo small { display:none; }
-  h1 { font-size:22px; }
-  .nokkel { font-size:24px; }
+  nav { width:100%; flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; gap:0; margin-left:-6px; }
+  nav::-webkit-scrollbar { display:none; }
+  nav a { padding:6px 8px; font-size:13px; white-space:nowrap; }
+  nav form.inline button { margin-left:4px; }
+  h1 { font-size:21px; }
+  h2 { font-size:16px; margin-top:22px; }
+  .kort { padding:14px; border-radius:12px; }
+  .kort.smal { margin:16px auto; padding:20px 18px; }
+  .rutenett { grid-template-columns:1fr 1fr; gap:10px; }
+  .rutenett.skjema { grid-template-columns:1fr; }
+  .rutenett > .kort { padding:12px 12px 12px 14px; }
+  .nokkel { font-size:22px; }
+  .estimat { font-size:17px; }
+  .skjul-m { display:none !important; }
+  .bare-m { display:inline; }
+  table { font-size:13px; }
+  th, td { padding:7px 6px; }
+  button { min-height:40px; }
+  button.liten { min-height:32px; }
+  .knapperad button, .knapperad select { font-size:13px; padding:8px 12px; }
+  .filtre a { padding:6px 12px; }
+  .rad input.tag, .rad input.nokkel { flex:1 1 40%; }
+  .rad input.url, .rad input.navn { flex:1 1 100%; min-width:0; }
+  input[type=text], input[type=number], input[type=url], select, textarea { font-size:16px; } /* hindrer auto-zoom på iOS */
+  .hero svg { max-width:260px; }
 }

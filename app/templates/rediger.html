@@ -7,7 +7,7 @@
 
 <form method="post" action="/vakt/lagre" id="skjema">
   <div class="kort">
-    <div class="rutenett">
+    <div class="rutenett skjema">
       <div><label for="navn" style="margin-top:0">Navn på markedet</label>
         <input type="text" id="navn" name="navn" required value="{{ skjema.navn }}" placeholder="BMW i4 2022"></div>
       <div><label for="slug" style="margin-top:0">Kortnavn (i adressen — bokstaver, tall, bindestrek)</label>
@@ -89,7 +89,7 @@
 
   <div class="kort">
     <h2 style="margin-top:0">Egen bil og henting</h2>
-    <div class="rutenett">
+    <div class="rutenett skjema">
       <div><label for="egen_bil" style="margin-top:0">Egen bil (valgfritt — vises i verdiestimatet)</label>
         <input type="text" id="egen_bil" name="egen_bil" value="{{ skjema.egen_bil }}" placeholder="BMW i4 M50 xDrive 2022"></div>
       <div><label for="egen_km" style="margin-top:0">Egen kilometerstand</label>

@@ -14,7 +14,7 @@
 {% endif %}
 
 <div class="kort">
-  <table>
+  <div class="tabell"><table>
     <thead><tr><th>Navn</th><th>Rolle</th><th>Passkeys</th><th>Vakter</th><th>Sist innlogget</th><th></th></tr></thead>
     <tbody>
     {% for b in brukere %}
@@ -37,13 +37,13 @@
       </tr>
     {% endfor %}
     </tbody>
-  </table>
+  </table></div>
 </div>
 
 <div class="kort">
   <h2 style="margin-top:0">Inviter ny bruker</h2>
   <form method="post" action="/admin/brukere/ny">
-    <div class="rutenett">
+    <div class="rutenett skjema">
       <div><label for="navn" style="margin-top:0">Navn</label><input type="text" id="navn" name="navn" required placeholder="Kari"></div>
       <div><label for="epost" style="margin-top:0">E-post (valgfritt, bare til din egen oversikt)</label><input type="text" id="epost" name="epost"></div>
       <div><label for="rolle" style="margin-top:0">Rolle</label>

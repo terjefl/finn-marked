@@ -33,7 +33,7 @@
     {% if r.v.sist_hentet %}Sist hentet {{ r.v.sist_hentet }}.{% else %}Aldri hentet ennå.{% endif %}
     {% if r.status %} <em>{{ r.status }}</em>{% endif %}
   </div>
-  <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap">
+  <div class="knapperad" style="margin-top:12px">
     <a href="/vakt/{{ r.v.slug }}"><button class="lett">Åpne</button></a>
     <form class="inline" method="post" action="/vakt/{{ r.v.slug }}/hent"><button>Oppdater nå</button></form>
     <form class="inline" method="post" action="/vakt/{{ r.v.slug }}/hent">

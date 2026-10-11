@@ -4,7 +4,7 @@
 {% block innhold %}
 <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap">
   <h1>{{ v.navn }}</h1>
-  <div style="display:flex; gap:8px">
+  <div class="knapperad">
     <form class="inline" method="post" action="/vakt/{{ v.slug }}/hent">
       <button{% if kjorer_aktiv %} disabled{% endif %}>{% if kjorer_aktiv %}Henter …{% else %}Oppdater nå{% endif %}</button></form>
     <a href="/vakt/{{ v.slug }}/rediger"><button class="lett">Rediger søk</button></a>
@@ -84,28 +84,28 @@
 {% endif %}
 
 <h2>Pris per kilometerintervall</h2>
-<table>
+<div class="tabell"><table>
   <thead><tr><th>Km</th><th>Antall</th><th>Median utropspris</th></tr></thead>
   <tbody>
   {% for b in botter %}
-    <tr><td>{{ b.fra }}–{{ b.til }} 000</td><td>{{ b.antall }}</td>
+    <tr><td style="white-space:nowrap">{{ (b.fra // 1000) }}–{{ (b.til // 1000) }} 000 km</td><td>{{ b.antall }}</td>
         <td>{{ b.median | kr }}</td></tr>
   {% endfor %}
   </tbody>
-</table>
+</table></div>
 
 <h2>Endringer</h2>
 {% if hendelser %}
-<table>
-  <thead><tr><th>Tid</th><th>Type</th><th>Hva</th></tr></thead>
+<div class="tabell"><table>
+  <thead><tr><th>Tid</th><th class="skjul-m">Type</th><th>Hva</th></tr></thead>
   <tbody>
   {% for h in hendelser %}
-    <tr><td class="dempet">{{ h.tid }}</td>
-        <td><span class="pill {% if h.type == 'solgt' %}solgt{% endif %}">{{ h.type }}</span></td>
+    <tr><td class="dempet tid">{{ h.tid[:10] }}<br>{{ h.tid[11:16] }}</td>
+        <td class="skjul-m"><span class="pill {% if h.type == 'solgt' %}solgt{% endif %}">{{ h.type }}</span></td>
         <td>{% if h.lenke %}<a href="{{ h.lenke }}" target="_blank">{{ h.tekst }}</a>{% else %}{{ h.tekst }}{% endif %}</td></tr>
   {% endfor %}
   </tbody>
-</table>
+</table></div>
 {% else %}<p class="dempet">Ingen registrerte endringer ennå — de dukker opp når neste henting finner noe nytt.</p>{% endif %}
 
 <h2>Til salgs ({{ annonser | length }})</h2>
@@ -120,52 +120,53 @@
   <input type="text" name="q" value="{{ q }}" placeholder="fritekst i tittel (f.eks. hengerfeste, laser, soltak)">
   <button class="lett">Filtrer</button>
 </form>
-<table>
-  <thead><tr><th>Pris</th><th>Km</th><th>År</th><th>Annonse</th><th>Sted</th><th>Selger</th><th>Kategori</th><th>Kilde</th></tr></thead>
+<div class="tabell"><table>
+  <thead><tr><th>Pris</th><th>Km</th><th class="skjul-m">År</th><th>Annonse</th><th class="skjul-m">Sted</th><th class="skjul-m">Selger</th><th>Kategori</th><th class="skjul-m">Kilde</th></tr></thead>
   <tbody>
   {% for a in annonser %}
     <tr>
-      <td>{{ a.pris | kr }}{% if a.pris_type == 'bud' %} <span class="dempet">bud</span>{% endif %}</td>
-      <td>{{ a.km | kr }}</td>
-      <td>{{ a.aar or "–" }}</td>
-      <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or "" }}</a></td>
-      <td>{{ a.sted or "–" }}</td>
-      <td>{{ a.selger_type or "–" }}{% if a.selger %} <span class="dempet">{{ a.selger }}</span>{% endif %}</td>
+      <td class="tall">{{ a.pris | kr }}{% if a.pris_type == 'bud' %} <span class="dempet">bud</span>{% endif %}</td>
+      <td class="tall">{{ a.km | kr }}</td>
+      <td class="skjul-m">{{ a.aar or "–" }}</td>
+      <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or "" }}</a>
+          <span class="bare-m dempet"><br>{{ a.aar or "" }}{% if a.sted %} · {{ a.sted }}{% endif %}{% if a.selger_type %} · {{ a.selger_type }}{% endif %}</span></td>
+      <td class="skjul-m">{{ a.sted or "–" }}</td>
+      <td class="skjul-m">{{ a.selger_type or "–" }}{% if a.selger %} <span class="dempet">{{ a.selger }}</span>{% endif %}</td>
       <td>{% for k in (a.tagger or "").split(",") if k %}<span class="pill v{{ (kategorier.index(k) if k in kategorier else 0) % 3 }}">{{ k }}</span>{% endfor %}</td>
-      <td class="dempet">{{ a.kilde }}{% if a.forst_sett %} · sett {{ a.forst_sett }}{% endif %}</td>
+      <td class="dempet skjul-m">{{ a.kilde }}{% if a.forst_sett %} · sett {{ a.forst_sett }}{% endif %}</td>
     </tr>
   {% endfor %}
   </tbody>
-</table>
+</table></div>
 
 {% if solgte %}
 <h2>Solgt siden overvåkingen startet ({{ solgte | length }})</h2>
-<table>
-  <thead><tr><th>Km</th><th>Annonse</th><th>Sist sett til</th><th>Solgt</th><th>Lå ute</th></tr></thead>
+<div class="tabell"><table>
+  <thead><tr><th>Km</th><th>Annonse</th><th>Sist sett til</th><th>Solgt</th><th class="skjul-m">Lå ute</th></tr></thead>
   <tbody>
   {% for a in solgte %}
     <tr><td>{{ a.km | kr }}</td>
         <td>{{ a.tittel }} {{ a.undertittel or "" }}</td>
         <td>{{ a.pris | kr }}</td>
         <td>{{ a.solgt_dato or "–" }}</td>
-        <td class="dempet">{{ a.forst_sett }} → {{ a.solgt_dato or "?" }}</td></tr>
+        <td class="dempet skjul-m">{{ a.forst_sett }} → {{ a.solgt_dato or "?" }}</td></tr>
   {% endfor %}
   </tbody>
-</table>
+</table></div>
 <p class="dempet">Liggetiden måles fra første observasjon i basen, ikke fra annonsen ble lagt ut.</p>
 {% endif %}
 
 <h2>Hentingshistorikk</h2>
 {{ historikk_svg | safe }}
-<table>
-  <thead><tr><th>Dato</th><th>Treff hos kildene</th><th>Til salgs m/pris</th><th>Median</th><th>Min</th><th>Max</th></tr></thead>
+<div class="tabell"><table>
+  <thead><tr><th>Dato</th><th>Treff</th><th>Med pris</th><th>Median</th><th class="skjul-m">Min</th><th class="skjul-m">Max</th></tr></thead>
   <tbody>
   {% for k in kjoringer | reverse %}
     <tr><td class="dempet">{{ k.dato }}</td><td>{{ k.treff }}</td><td>{{ k.aktive }}</td>
         <td>{{ k.median | kr }}</td>
-        <td>{{ k['min'] | kr }}</td>
-        <td>{{ k['max'] | kr }}</td></tr>
+        <td class="skjul-m">{{ k['min'] | kr }}</td>
+        <td class="skjul-m">{{ k['max'] | kr }}</td></tr>
   {% endfor %}
   </tbody>
-</table>
+</table></div>
 {% endblock %}
