@@ -25,11 +25,11 @@ from app import db  # noqa: E402
 def importer(gammel: Path, mål: Path, slug: str, ny_slug: str | None, tørr: bool) -> None:
     if not gammel.exists():
         sys.exit(f"finner ikke {gammel}")
+    if mål:
+        # --db kan være mappa eller selve sqlite-fila; db.data() er mappa.
+        db.sett_data(mål.parent if mål.suffix else mål)
     g = sqlite3.connect(gammel)
     g.row_factory = sqlite3.Row
-    import os
-    if mål:
-        os.environ["FINN_DATA"] = str(mål.parent)
     db.init()
     con = db.base()
 
@@ -50,7 +50,14 @@ def importer(gammel: Path, mål: Path, slug: str, ny_slug: str | None, tørr: bo
              d["borte_dato"], d["aktiv"], d.get("merke"), d.get("solgt") or 0, d.get("solgt_dato")))
         n += 1
 
-    priser = g.execute("SELECT * FROM pris_historikk").fetchall()
+    kolonner = {r[1] for r in g.execute("PRAGMA table_info(pris_historikk)")}
+    if "vakt" in kolonner:
+        priser = g.execute("SELECT * FROM pris_historikk WHERE vakt=?", (slug,)).fetchall()
+    else:
+        # Uten vakt-kolonne: knytt prispunktene til annonsene vi alt har filtrert på slug.
+        priser = g.execute("SELECT p.* FROM pris_historikk p "
+                           "JOIN annonser a ON a.finn_id = p.finn_id WHERE a.vakt=?",
+                           (slug,)).fetchall()
     for r in priser:
         d = dict(r)
         con.execute("INSERT INTO pris_historikk (slug, kilde, kilde_id, dato, pris, pris_type) "
@@ -68,7 +75,7 @@ def importer(gammel: Path, mål: Path, slug: str, ny_slug: str | None, tørr: bo
         print("TØRRKJØRING: ingen endringer skrevet")
     else:
         con.commit()
-        print(f"skrevet til {mål or db.DATA / 'finn-marked.sqlite'}")
+        print(f"skrevet til {db.data() / 'finn-marked.sqlite'}")
 
 
 def main() -> None:
