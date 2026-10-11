@@ -122,9 +122,11 @@
     <h2 style="margin-top:0">Varsling</h2>
     <p>Bilen hentes fra FINN én gang i døgnet, klokka <strong id="hentetime-vis">{{ skjema.hentetime }}</strong>, og når du trykker
       «Oppdater nå». Etter hver henting får du <strong>ett varsel</strong> hvis noe av dette har skjedd siden sist:</p>
-    <div class="filtre" style="margin-top:4px">
+    <div style="display:grid; gap:6px; margin-top:4px">
       {% for t, navn in varsel_typer.items() %}
-      <label class="valg" title="{{ varsel_forklaring[t] }}"><input type="checkbox" name="varsel_typer" value="{{ t }}" {{ 'checked' if t in skjema.varsling.typer }}> {{ navn }}</label>
+      <label class="valg" style="display:flex; align-items:flex-start; gap:10px">
+        <input type="checkbox" name="varsel_typer" value="{{ t }}" {{ 'checked' if t in skjema.varsling.typer }} style="margin-top:3px">
+        <span><strong>{{ navn }}</strong><br><span class="dempet">{{ varsel_forklaring[t] }}</span></span></label>
       {% endfor %}
     </div>
     <p style="margin:12px 0 4px">Send varslene for denne bilen til:</p>
@@ -137,8 +139,7 @@
         Pushover <span class="dempet">({{ kanaler.pushover.tekst }})</span></label>
     </div>
     {% if not kanaler.epost.klar and not kanaler.pushover.klar %}<p style="color:var(--negativ); margin:6px 0 0">Ingen kanal er klar — legg inn e-post eller Pushover under «Konto».</p>{% endif %}
-    <p class="dempet" style="margin-top:8px">Ingen avkryssing = ingen varsler. Skjer det ingenting, sendes ingenting. Bryterne på «Konto» overstyrer alle bilene.
-      {% if skjema.formaal == 'kjoper' %}«Kandidater» er annonser som oppfyller kjøpskriteriene over; «prisendringer» gjelder bare kandidatene.{% else %}«Prisendringer» gjelder alle annonser i markedet.{% endif %}</p>
+    <p class="dempet" style="margin-top:8px">Ingen avkryssing = ingen varsler. Skjer det ingenting, sendes ingenting. Bryterne på «Konto» overstyrer alle bilene.</p>
   </div>
 
   <div class="kort" id="egen-bil-kort">

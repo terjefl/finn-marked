@@ -26,18 +26,19 @@ from . import analyse, db
 logg = logging.getLogger("finn-marked.varsling")
 
 TYPER = {
-    "kandidat": "Nye annonser som oppfyller kjøpskriteriene",
-    "pris": "Prisendringer",
-    "egen": "Din bil dukker opp i markedet",
-    "solgt": "Biler som blir solgt",
-    "ny": "Alle nye annonser",
+    "kandidat": "Ny kandidat",
+    "pris": "Prisendring",
+    "egen": "Min egen bil legges ut",
+    "solgt": "En annonse markeres solgt",
+    "ny": "Hver ny annonse",
 }
 FORKLARING = {
-    "kandidat": "En ny annonse (eller en som er lagt ut på nytt) oppfyller kjøpskriteriene dine.",
-    "pris": "Prisen på en annonse er endret. Kjøper: bare kandidater. Eier: hele markedet.",
-    "egen": "En annonse med ditt registreringsnummer eller understellsnummer dukker opp.",
-    "solgt": "En annonse er markert solgt hos FINN.",
-    "ny": "Alle nye annonser i søket, uansett kriterier.",
+    "kandidat": "En ny annonse i søket (eller en lagt ut på nytt) oppfyller kjøpskriteriene dine.",
+    "pris": "Prisen endres på en annonse. Som kjøper: bare på kandidatene. Som eier: på alle i søket.",
+    "egen": "En annonse har samme registreringsnummer eller understellsnummer som din bil — altså din eksakte bil, "
+            "f.eks. lagt ut av en forhandler etter at du solgte den.",
+    "solgt": "En annonse i søket får FINNs «Solgt»-merke. Du får siste utropspris og hvor lenge den lå ute.",
+    "ny": "Alle nye annonser i søket, uansett kriterier. Kan bli mange i store markeder.",
 }
 STANDARD = {"kjoper": ["kandidat", "pris"], "eier": ["egen", "solgt"]}
 
