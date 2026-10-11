@@ -100,8 +100,8 @@ def hoved() -> int:
             from app import kjoretoy as kjmod
             kjmod.slaa_opp = lambda regnr: {"regnr": "EB12345", "merke": "BMW", "modell": "I4", "aar": 2022,
                                             "modellaar": 2022, "elektrisk": True, "beskrivelse": "BMW I4 M50 xDrive 2022"}
-            finn_kilde.hent_merketre = lambda tving=False: [
-                {"navn": "BMW", "kode": "0.749", "modeller": [{"navn": "i4", "kode": "1.749.8308"}]}]
+            finn_kilde.hent_merketre = lambda tving=False, vertikal="car": [
+                {"navn": "BMW", "kode": "0.749", "param": "variant", "modeller": [{"navn": "i4", "kode": "1.749.8308", "param": "variant"}]}]
             r = c.get("/oppslag", params={"regnr": "eb12345"})
             sjekk("oppslag-siden", r.status_code == 200 and "BMW I4 M50 xDrive 2022" in r.text
                   and 'href="/vakt/ny?regnr=EB12345"' in r.text, True)

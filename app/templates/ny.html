@@ -90,7 +90,7 @@
   function byggUrl() {
     if (!forslag) return;
     const kode = modell.value || (forslag.merke && forslag.merke.kode);
-    let u = 'https://www.finn.no/mobility/search/car?variant=' + kode;
+    let u = forslag.sti + '?' + forslag.param + '=' + kode;
     const fra = +aarFra.value || 0, til = +aarTil.value || fra;
     if (fra) u += '&year_from=' + fra + '&year_to=' + Math.max(fra, til);
     if (forslag.elektrisk) u += '&fuel=4';
@@ -111,7 +111,7 @@
       if (d.feil && !d.modeller) { rinfo.textContent = d.feil; return; }
       forslag = d;
       rinfo.textContent = (d.kjoretoy && d.kjoretoy.beskrivelse) ? d.kjoretoy.beskrivelse + (d.advarsel ? ' — ' + d.advarsel : '') : (d.feil || '');
-      modell.innerHTML = '<option value="">Alle modeller fra ' + d.merke.navn + '</option>' +
+      modell.innerHTML = '<option value="">' + (d.modeller.length ? 'Alle modeller fra ' : 'Alle ' + d.vertikal_navn + ' fra ') + d.merke.navn + '</option>' +
         d.modeller.map(m => `<option value="${m.kode}" ${d.modell && d.modell.kode === m.kode ? 'selected' : ''}>${m.navn}</option>`).join('');
       aarFra.value = d.aar_fra || ''; aarTil.value = d.aar_til || '';
       document.getElementById('aarinfo').textContent = d.modellaar && d.modellaar !== d.aar

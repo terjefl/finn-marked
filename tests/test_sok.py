@@ -96,6 +96,17 @@ def test_finn_koder() -> None:
     sjekk("utvidelse velger korteste", f("VOLKSWAGEN", "TIGUAN")["modell"]["navn"], "Tiguan Allspace")
     sjekk("ukjent modell gir merke + liste", (f("BMW", "Z9")["modell"], len(f("BMW", "Z9")["modeller"])), (None, 4))
     sjekk("ukjent merke", f("Lada", "Niva"), {"merke": None, "modell": None, "modeller": []})
+    sjekk("aksenter: BURSTNER → Bürstner",
+          finn.finn_merke_og_modell("BURSTNER", "BT6853", [{"navn": "Bürstner", "kode": "50", "param": "make", "modeller": []}])["merke"]["kode"], "50")
+    sjekk("vertikal av URL", [finn.vertikal_av_url(u) for u in (
+        "https://www.finn.no/mobility/search/car?variant=0.749", "https://www.finn.no/mobility/search/caravan/mobilehome?make=50",
+        "https://www.finn.no/mobility/search/caravan", "https://www.finn.no/mobility/search/mc?make=1")],
+          ["car", "mobilehome", "caravan", "mc"])
+    sjekk("api_url for bobil", finn.api_url("https://www.finn.no/mobility/search/caravan/mobilehome?make=50&page=2", 2),
+          "https://www.finn.no/mobility/search/api/search/SEARCH_ID_CAR_MOBILE_HOME?make=50&page=2")
+    sjekk("sok_url bobil", finn.sok_url("50", 2017, True, 2018, vertikal="mobilehome", param="make"),
+          "https://www.finn.no/mobility/search/caravan/mobilehome?make=50&year_from=2017&year_to=2018")
+    sjekk("sjekk_url bobil ok", sok.sjekk_url("https://www.finn.no/mobility/search/caravan/mobilehome?make=50"), None)
     sjekk("sok_url", finn.sok_url("1.749.8308", 2022, True),
           "https://www.finn.no/mobility/search/car?variant=1.749.8308&year_from=2022&year_to=2022&fuel=4")
     sjekk("sok_url uten år", finn.sok_url("0.749"), "https://www.finn.no/mobility/search/car?variant=0.749")

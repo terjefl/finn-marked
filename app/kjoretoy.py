@@ -118,7 +118,8 @@ def normaliser(data: dict, regnr: str | None = None) -> dict:
         "egenvekt": _g(td, "vekter", "egenvekt"),
         "tillatt_totalvekt": _g(td, "vekter", "tillattTotalvekt"),
         "tilhengervekt": _g(td, "vekter", "tillattTilhengervektMedBrems"),
-        "klasse": _g(gen, "tekniskKode", "kodeNavn"),
+        "klasse": _g(gen, "tekniskUnderkode", "kodeNavn") or _g(gen, "tekniskKode", "kodeNavn"),
+        "klassekode": _g(gen, "tekniskKode", "kodeVerdi"),
         "drivhjul": _g(td, "akslinger", "forbindelseMellomDrivaksler", "kodeNavn"),
         "seter": _g(td, "persontall", "sitteplasserTotalt"),
         "girkasse": _g(td, "motorOgDrivverk", "girkassetype", "kodeNavn"),
@@ -153,6 +154,20 @@ def modellaar_fra_vin(vin: str | None, reg_aar: int | None = None) -> int | None
     if reg_aar and abs(aar - reg_aar) > 1:
         return None
     return aar
+
+
+def finn_vertikal(kj: dict) -> str:
+    """Hvilken FINN-vertikal kjøretøyet hører hjemme i: bobil, campingvogn, MC eller bil.
+    Vegvesenets underkode sier «Campingbil»; tekniske koder L* er MC/moped, O* tilhenger."""
+    klasse = (kj.get("klasse") or "").lower()
+    kode = (kj.get("klassekode") or "").upper()
+    if "campingbil" in klasse or "bobil" in klasse:
+        return "mobilehome"
+    if kode.startswith("O") or "campingvogn" in klasse or "campingtilhenger" in klasse:
+        return "caravan"
+    if kode.startswith("L"):
+        return "mc"
+    return "car"
 
 
 def beskrivelse(kj: dict) -> str:

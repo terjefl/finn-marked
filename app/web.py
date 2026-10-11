@@ -280,12 +280,14 @@ def api_sokforslag(regnr: str, b: dict = Depends(bruker)):
         kj = kjoretoy.slaa_opp(regnr)
     except kjoretoy.Oppslagsfeil as e:
         return {"feil": str(e)}
+    vertikal = kjoretoy.finn_vertikal(kj)
     try:
-        treff = finn_kilde.finn_merke_og_modell(kj.get("merke"), kj.get("modell"))
+        treff = finn_kilde.finn_merke_og_modell(kj.get("merke"), kj.get("modell"), vertikal=vertikal)
     except RuntimeError as e:
-        return {"feil": f"Fikk ikke merke-/modellisten fra FINN: {e}", "kjoretoy": kj}
+        return {"feil": f"Fikk ikke merkelisten fra FINN: {e}", "kjoretoy": kj}
     if not treff["merke"]:
-        return {"feil": f"Fant ikke merket «{kj.get('merke')}» hos FINN.", "kjoretoy": kj}
+        return {"feil": f"Fant ikke merket «{kj.get('merke')}» hos FINN ({finn_kilde.VERTIKALER[vertikal]['navn']}).",
+                "kjoretoy": kj}
     valgt = treff["modell"] or treff["merke"]
     # FINN-selgere oppgir som regel registreringsåret som årsmodell, men en bil registrert
     # på høsten er ofte neste års modell (VIN). Spriker de, dekker søket begge årene.
@@ -297,10 +299,13 @@ def api_sokforslag(regnr: str, b: dict = Depends(bruker)):
                                 aarstekst) if x)
     return {"kjoretoy": kj, "merke": treff["merke"], "modell": treff["modell"], "modeller": treff["modeller"],
             "aar": aar_r, "modellaar": aar_m, "aar_fra": aar_fra, "aar_til": aar_til,
-            "elektrisk": kj.get("elektrisk"),
-            "url": finn_kilde.sok_url(valgt["kode"], aar_fra, bool(kj.get("elektrisk")), aar_til),
+            "elektrisk": bool(kj.get("elektrisk")) and vertikal == "car",
+            "vertikal": vertikal, "vertikal_navn": finn_kilde.VERTIKALER[vertikal]["navn"],
+            "sti": "https://www.finn.no" + finn_kilde.VERTIKALER[vertikal]["sti"], "param": valgt["param"],
+            "url": finn_kilde.sok_url(valgt["kode"], aar_fra, bool(kj.get("elektrisk")), aar_til,
+                                      vertikal=vertikal, param=valgt["param"]),
             "navn": navn, "slug": sokmod.slugify(navn),
-            "advarsel": None if treff["modell"] else
+            "advarsel": None if (treff["modell"] or not treff["modeller"]) else
             f"Fant ikke modellen «{kj.get('modell')}» i FINNs liste for {treff['merke']['navn']} — velg under."}
 
 

@@ -22,8 +22,32 @@ UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
       "Chrome/126.0 Safari/537.36")
 SLEEP = 1.0
 #: FINNs JSON-API bak søkesiden: samme parametre som søkesiden, strukturerte annonser,
-#: og filteret «variant» = hele merke-/modelltreet.
-API_SOK = "https://www.finn.no/mobility/search/api/search/SEARCH_ID_CAR_USED"
+#: og filteret «variant» (bil) / «make» (de andre) = merke- og modelltreet.
+API_SOK_BASE = "https://www.finn.no/mobility/search/api/search/"
+API_SOK = API_SOK_BASE + "SEARCH_ID_CAR_USED"
+
+#: FINN har én søkevertikal per kjøretøytype, med egen søkenøkkel, egen side og eget
+#: merketre. Bil har merke → modell (variant=1.<merke>.<modell>); de andre bare merke (make=).
+#: Sidene for bobil/campingvogn/MC rendres i nettleseren, så der finnes bare API-et.
+VERTIKALER: dict[str, dict] = {
+    "car": {"key": "SEARCH_ID_CAR_USED", "sti": "/mobility/search/car", "tre": "variant", "navn": "bil"},
+    "mobilehome": {"key": "SEARCH_ID_CAR_MOBILE_HOME", "sti": "/mobility/search/caravan/mobilehome",
+                   "tre": "make", "navn": "bobil"},
+    "caravan": {"key": "SEARCH_ID_CAR_CARAVAN", "sti": "/mobility/search/caravan", "tre": "make",
+                "navn": "campingvogn"},
+    "mc": {"key": "SEARCH_ID_MC_USED", "sti": "/mobility/search/mc", "tre": "make", "navn": "MC"},
+}
+
+
+def vertikal_av_url(url: str) -> str:
+    sti = urllib.parse.urlsplit(url or "").path.rstrip("/")
+    if sti.endswith("/mobilehome"):
+        return "mobilehome"
+    if sti.endswith("/caravan"):
+        return "caravan"
+    if sti.endswith("/mc"):
+        return "mc"
+    return "car"
 
 
 def hent(url: str, timeout: int = 40, forsok: int = 3) -> str:
@@ -254,12 +278,14 @@ def i_dag() -> str:
 
 def api_url(sokeurl: str, side: int = 1) -> str:
     """Søkesidens URL → API-URL med samme parametre. Søkesiden kaller selv dette
-    API-et, så filtrene (variant, year_from, q, fuel …) er de samme. `page` byttes."""
+    API-et, så filtrene (variant, year_from, q, fuel …) er de samme. `page` byttes,
+    og søkenøkkelen følger vertikalen i stien (bil, bobil, campingvogn, MC)."""
     deler = urllib.parse.urlsplit(sokeurl)
     q = [(k, v) for k, v in urllib.parse.parse_qsl(deler.query, keep_blank_values=False) if k != "page"]
     if side > 1:
         q.append(("page", str(side)))
-    return API_SOK + ("?" + urllib.parse.urlencode(q) if q else "")
+    key = VERTIKALER[vertikal_av_url(sokeurl)]["key"]
+    return API_SOK_BASE + key + ("?" + urllib.parse.urlencode(q) if q else "")
 
 
 def _dato_av_ms(ms) -> str | None:
@@ -350,11 +376,13 @@ def kilde_modus() -> str:
 
 def hent_sok_valgt(url: str, logg=lambda m: None) -> tuple[list[dict], int, int]:
     """API først; faller tilbake til HTML-henteren hvis API-et svarer uventet."""
-    if kilde_modus() == "html":
+    if kilde_modus() == "html" and vertikal_av_url(url) == "car":
         return hent_sok(url, logg)
     try:
         return hent_sok_api(url, logg)
     except (RuntimeError, ValueError) as e:
+        if vertikal_av_url(url) != "car":
+            raise                                  # ingen HTML-reserve for bobil/campingvogn/MC
         logg(f"FINN-API-et feilet ({e}); prøver HTML-siden")
         return hent_sok(url, logg)
 
@@ -381,34 +409,41 @@ registrer(FinnKilde())
 
 #: FINNs JSON-API bak søkesiden. Gir blant annet filteret «variant» = hele treet av
 #: merker (0.<kode>) og modeller (1.<merke>.<kode>) med visningsnavn.
-_merketre: dict = {"hentet": 0.0, "merker": []}
+_merketre: dict[str, dict] = {}
 MERKETRE_LEVETID = 24 * 3600
 
 
 def _normaliser_navn(s: str | None) -> str:
-    return re.sub(r"[^a-z0-9æøå]", "", (s or "").lower())
+    """Små bokstaver uten aksenter og skilletegn: «Bürstner» og «BURSTNER» → «burstner»."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", (s or "").lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9æøå]", "", t)
 
 
-def hent_merketre(tving: bool = False) -> list[dict]:
-    """[{navn, kode, modeller: [{navn, kode}]}] fra FINN, mellomlagret et døgn."""
+def hent_merketre(tving: bool = False, vertikal: str = "car") -> list[dict]:
+    """[{navn, kode, param, modeller: [{navn, kode, param}]}] fra FINN, mellomlagret et døgn
+    per vertikal. Bil har modeller under merkene (variant=…), de andre bare merker (make=…)."""
     import json as _json
-    if not tving and _merketre["merker"] and time.monotonic() - _merketre["hentet"] < MERKETRE_LEVETID:
-        return _merketre["merker"]
-    rå = hent(API_SOK + "?q=")
-    data = _json.loads(rå)
+    v = VERTIKALER[vertikal]
+    cache = _merketre.get(vertikal)
+    if not tving and cache and time.monotonic() - cache["hentet"] < MERKETRE_LEVETID:
+        return cache["merker"]
+    data = _json.loads(hent(API_SOK_BASE + v["key"] + "?q="))
     filtre = {f.get("name"): f for f in data.get("filters") or []}
     merker = []
-    for m in (filtre.get("variant") or {}).get("filter_items") or []:
-        merker.append({"navn": m.get("display_name"), "kode": m.get("value"),
-                       "modeller": [{"navn": x.get("display_name"), "kode": x.get("value")}
+    for m in (filtre.get(v["tre"]) or {}).get("filter_items") or []:
+        merker.append({"navn": m.get("display_name"), "kode": m.get("value"), "param": v["tre"],
+                       "modeller": [{"navn": x.get("display_name"), "kode": x.get("value"), "param": v["tre"]}
                                     for x in (m.get("filter_items") or [])]})
     if not merker:
-        raise RuntimeError("FINN svarte uten merke-/modellfilter — API-et kan ha endret seg")
-    _merketre.update(hentet=time.monotonic(), merker=merker)
+        raise RuntimeError(f"FINN svarte uten merkefilter for {v['navn']} — API-et kan ha endret seg")
+    _merketre[vertikal] = {"hentet": time.monotonic(), "merker": merker}
     return merker
 
 
-def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] | None = None) -> dict:
+def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] | None = None,
+                         vertikal: str = "car") -> dict:
     """Mapper Vegvesenets merke/modell («BMW», «I4») til FINNs koder.
 
     Returnerer {merke: {navn,kode}|None, modell: {navn,kode}|None, modeller: [...]} —
@@ -416,7 +451,7 @@ def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] 
     når treffet er usikkert. Modell-match: eksakt normalisert navn, ellers det
     lengste FINN-navnet som er inneholdt i Vegvesenets (eller omvendt).
     """
-    tre = tre if tre is not None else hent_merketre()
+    tre = tre if tre is not None else hent_merketre(vertikal=vertikal)
     nm = _normaliser_navn(merke)
     m_treff = None
     if nm:
@@ -459,16 +494,20 @@ def finn_merke_og_modell(merke: str | None, modell: str | None, tre: list[dict] 
         if not mo_treff:
             kand = [x for x in modeller if _normaliser_navn(x["navn"]).startswith(nmo)]
             mo_treff = min(kand, key=lambda x: len(x["navn"])) if kand else None
-    return {"merke": {"navn": m_treff["navn"], "kode": m_treff["kode"]},
-            "modell": ({"navn": mo_treff["navn"], "kode": mo_treff["kode"]} if mo_treff else None),
+    param = m_treff.get("param") or "variant"
+    return {"merke": {"navn": m_treff["navn"], "kode": m_treff["kode"], "param": param},
+            "modell": ({"navn": mo_treff["navn"], "kode": mo_treff["kode"], "param": param} if mo_treff else None),
             "modeller": modeller}
 
 
-def sok_url(kode: str, aar: int | None = None, elektrisk: bool = False, aar_til: int | None = None) -> str:
-    """FINN-søk for en merke-/modellkode, valgfritt låst til årsmodell (eller et spenn) og el."""
-    url = f"https://www.finn.no/mobility/search/car?variant={kode}"
+def sok_url(kode: str, aar: int | None = None, elektrisk: bool = False, aar_til: int | None = None,
+            vertikal: str = "car", param: str | None = None) -> str:
+    """FINN-søk for en merke-/modellkode i en vertikal, valgfritt låst til årsmodell
+    (eller et spenn) og, for bil, til el."""
+    v = VERTIKALER[vertikal]
+    url = f"https://www.finn.no{v['sti']}?{param or v['tre']}={kode}"
     if aar:
         url += f"&year_from={aar}&year_to={aar_til or aar}"
-    if elektrisk:
+    if elektrisk and vertikal == "car":
         url += "&fuel=4"
     return url

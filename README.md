@@ -35,7 +35,7 @@ auksjoner holdes utenfor median, kurve og km-bøtter, og vises bare i annonselis
 
 | Kilde | Status | Merknad |
 |---|---|---|
-| `finn` | i bruk | FINN mobilitet via JSON-API-et bak søkesiden (strukturerte felt, reg.nr, understellsnummer, utlagt-dato, pris også på solgte). HTML-henteren ligger som reserve: `FINN_KILDE=html` |
+| `finn` | i bruk | FINN mobilitet (bil, bobil, campingvogn og MC: vertikalen følger søke-URL-en) via JSON-API-et bak søkesiden (strukturerte felt, reg.nr, understellsnummer, utlagt-dato, pris også på solgte). HTML-henteren ligger som reserve: `FINN_KILDE=html` |
 | `auksjonen` | i bruk | Auksjonen.no (JSON-API). Objektene ligger også på FINN, men bud/minstepris hentes her |
 
 Kategorier er ikke hardkodet per merke: mønstrene utledes av vaktens egne

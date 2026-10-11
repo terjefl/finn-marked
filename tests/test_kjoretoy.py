@@ -73,6 +73,10 @@ def hoved() -> int:
     sjekk("modellår fra VIN: ugyldig tegn", kjoretoy.modellaar_fra_vin("WBY31AW04OFN73190", 2022), None)
     sjekk("modellår fra VIN: for langt fra registreringsåret", kjoretoy.modellaar_fra_vin("WV1ZZZ2KZJX026311", 2010), None)
     sjekk("fixture: modellår F=2015 avvist mot 2022", k["modellaar"], None)
+    sjekk("vertikal: bil", kjoretoy.finn_vertikal({"klasse": "Personbil", "klassekode": "M1"}), "car")
+    sjekk("vertikal: bobil", kjoretoy.finn_vertikal({"klasse": "Campingbil", "klassekode": "M1"}), "mobilehome")
+    sjekk("vertikal: campingvogn", kjoretoy.finn_vertikal({"klasse": "Campingtilhenger", "klassekode": "O2"}), "caravan")
+    sjekk("vertikal: MC", kjoretoy.finn_vertikal({"klasse": "Motorsykkel", "klassekode": "L3e"}), "mc")
     sjekk("typekode holdes ute av beskrivelsen",
           kjoretoy.beskrivelse({"merke": "VOLKSWAGEN", "modell": "CADDY", "typebetegnelse": "2KN", "aar": 2017}),
           "Volkswagen Caddy 2017")
