@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block tittel %}Oversikt — FINN-marked{% endblock %}
 {% block innhold %}
-<h1>Markedsovervåking for biler</h1>
+<h1>Markedene dine</h1>
 <p class="dempet">
-  Hver vakt er ett marked: ett eller flere søk hos én eller flere kilder, samlet i samme base.
-  Henting skjer automatisk én gang i døgnet per vakt, og kan kjøres manuelt når som helst.
+  Et marked er alt som er til salgs av en bil du følger, for eksempel alle BMW i4 fra 2022. Det hentes
+  automatisk én gang i døgnet, og kan oppdateres manuelt når som helst.
 </p>
 
 {% for r in oversikt %}
@@ -43,9 +43,9 @@
 {% else %}
 <div class="kort tom">
   {% include "ikon/illustrasjon.svg" %}
-  <h2 style="margin-top:0">Ingen vakter ennå</h2>
+  <h2 style="margin-top:0">Du følger ingen markeder ennå</h2>
   <p class="dempet">Lim inn et søk fra finn.no, så følger appen markedet for deg: priser, salg og verdikurve.</p>
-  <a href="/vakt/ny" class="knapp-lenke"><button>Opprett den første vakten</button></a>
+  <a href="/vakt/ny" class="knapp-lenke"><button>Følg et marked</button></a>
 </div>
 {% endfor %}
 {% endblock %}

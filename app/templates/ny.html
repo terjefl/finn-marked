@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% block tittel %}Ny vakt — FINN-marked{% endblock %}
+{% block tittel %}Følg marked — FINN-marked{% endblock %}
 {% block innhold %}
-<h1>Ny vakt</h1>
+<h1>Følg et nytt marked</h1>
 <p class="dempet">Gjør søket på finn.no (merke, modell, årsmodell, det du vil følge), kopier adressen fra
   adressefeltet og lim den inn her. Appen sjekker søket med en gang og foreslår navn.</p>
 
@@ -24,7 +24,7 @@
     <button type="button" class="lett" id="sjekk">Sjekk søket</button>
   </div>
   {% if brukere %}
-  <label for="eier">Vakten er for</label>
+  <label for="eier">Markedet følges av</label>
   <select id="eier" name="eier">
     {% for b in brukere %}<option value="{{ b.id }}" {% if b.id == valgt_eier %}selected{% endif %}>{{ b.navn }}{% if b.id == bruker.id %} (deg){% endif %}</option>{% endfor %}
   </select>
