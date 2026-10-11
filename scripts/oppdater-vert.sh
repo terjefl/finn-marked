@@ -35,11 +35,29 @@ fi
 
 echo "== ber Portainer redeploye stack $STACK_ID"
 python3 - "$STACK_ID" <<'PY'
-import json, sys, urllib.request, yaml, pathlib
+import os, sys, urllib.request, pathlib
+
+# API-nøkkelen leses fra ~/.hermes/config.yaml. MERK: nøkkelen inneholder
+# base64-tegn (+ / =), så den leses som «alt etter første kolon» på linjen —
+# aldri med et regex som begrenser tegnsettet (det kutter verdien ved første +).
+# Miljøvariabelen PORTAINER_API_KEY går foran hvis den er satt.
 stack_id = sys.argv[1]
-cfg = yaml.safe_load((pathlib.Path.home() / ".hermes/config.yaml").read_text())
-api = cfg["mcp_servers"]["portainer"]["headers"]["X-Portainer-API-Key"]
-base = cfg["mcp_servers"]["portainer"].get("url", "http://10.11.12.16:9000").rstrip("/")
+api = os.environ.get("PORTAINER_API_KEY", "")
+base = "http://10.11.12.16:9000"
+cfg_sti = pathlib.Path.home() / ".hermes/config.yaml"
+if not api and cfg_sti.exists():
+    linjer = cfg_sti.read_text(encoding="utf-8").splitlines()
+    for n, l in enumerate(linjer):
+        if "X-Portainer-API-Key" in l:
+            api = l.split(":", 1)[1].strip().strip('"').strip("'")
+            # leter etter url i portainer-blokken over
+            for j in range(n, max(0, n - 15), -1):
+                if "url:" in linjer[j] and "portainer" not in linjer[j].split("url:")[-1]:
+                    base = linjer[j].split("url:", 1)[1].strip().strip('"').strip("'").rstrip("/")
+                    break
+            break
+if not api:
+    sys.exit("  fant ikke Portainer-API-nøkkelen (sett PORTAINER_API_KEY)")
 req = urllib.request.Request(f"{base}/api/stacks/{stack_id}/git/redeploy?endpointId=2",
                             method="POST", data=b'{"Prune": false}',
                             headers={"X-API-Key": api, "Content-Type": "application/json"})

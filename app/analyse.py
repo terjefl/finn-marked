@@ -30,10 +30,17 @@ def km_str(n) -> str:
     return "–" if n is None else f"{n:,}".replace(",", " ") + " km"
 
 
+def er_utropspris(a: dict) -> bool:
+    """Utropspris/fastpris er «hva selger ber om». Bud på auksjon er ikke det —
+    de holdes utenfor median, kurve og km-bøtter, men vises i annonselisten."""
+    return (a.get("pris_type") or "utropspris") in ("utropspris", "fastpris")
+
+
 def oppsummer(annonser: list[dict]) -> dict:
-    priser = sorted(a["pris"] for a in annonser if a.get("pris"))
+    priser = sorted(a["pris"] for a in annonser if a.get("pris") and er_utropspris(a))
     kms = sorted(a["km"] for a in annonser if a.get("km"))
-    ut = {"antall": len(annonser), "antall_pris": len(priser)}
+    ut = {"antall": len(annonser), "antall_pris": len(priser),
+          "antall_bud": sum(1 for a in annonser if (a.get("pris_type") == "bud"))}
     if priser:
         ut.update({
             "median": statistics.median(priser),
@@ -49,7 +56,7 @@ def oppsummer(annonser: list[dict]) -> dict:
 
 def verdikurve(annonser: list[dict], egen_km: int | None = None) -> dict | None:
     """Kurve på utropspriser. Estimatet er utropspris-nivå, ikke oppnådd pris."""
-    par = [(a["km"], a["pris"]) for a in annonser if a.get("km") and a.get("pris")]
+    par = [(a["km"], a["pris"]) for a in annonser if a.get("km") and a.get("pris") and er_utropspris(a)]
     if len(par) < 5:
         return None
     x = [p[0] for p in par]
@@ -68,7 +75,7 @@ def verdikurve(annonser: list[dict], egen_km: int | None = None) -> dict | None:
 def km_botter(annonser: list[dict], steg: int = 10000) -> list[dict]:
     botter: dict[int, list[int]] = {}
     for a in annonser:
-        if a.get("pris") and a.get("km") is not None:
+        if a.get("pris") and a.get("km") is not None and er_utropspris(a):
             nokkel = a["km"] // steg * steg
             botter.setdefault(nokkel, []).append(a["pris"])
     return [{"fra": k, "til": k + steg, "antall": len(v), "median": statistics.median(v)}
@@ -79,7 +86,7 @@ def nabolag(annonser: list[dict], km: int, vindu: int = 10000) -> dict | None:
     """De sammenlignbare annonsene rundt en gitt kilometerstand — tallet brukeren
     faktisk forholder seg til, i motsetning til regresjonslinja."""
     n = [a for a in annonser if a.get("km") is not None and a.get("pris")
-         and abs(a["km"] - km) <= vindu]
+         and er_utropspris(a) and abs(a["km"] - km) <= vindu]
     if not n:
         return None
     priser = sorted(a["pris"] for a in n)
