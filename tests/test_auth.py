@@ -151,6 +151,10 @@ def hoved() -> int:
                       ("kjoper", {"maks_pris": 450000, "maks_km": 60000, "aar_fra": 2022, "kategorier": ["Fully Charged"]}))
                 sjekk("varsling lagret (ukjent type filtrert, kanaler på)", vk["varsling"],
                       {"aktiv": True, "typer": ["kandidat"], "kanaler": {"epost": True, "pushover": True}})
+            c.post("/konto/tema", data={"tema": "moerk"})
+            sjekk("tema lagres og settes på html", 'data-tema="moerk"' in c.get("/").text, True)
+            c.post("/konto/tema", data={"tema": "tull"})
+            sjekk("ugyldig tema → auto (ingen data-tema)", "data-tema" in c.get("/").text, False)
             r = c.post("/konto/varsling", data={"epost": "terje@x.no", "pushover": "uABC", "varsel_epost": "1"})
             sjekk("konto: varsling lagret", r.status_code, 303)
             with db.aapen() as con:

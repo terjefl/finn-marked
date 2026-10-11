@@ -7,12 +7,18 @@
   --skygge: 0 1px 2px rgba(16,32,48,.05), 0 8px 24px -12px rgba(16,32,48,.18);
   --radius: 14px;
 }
+/* Mørk palett: følger systemet (auto), med mindre brukeren har valgt lyst eller mørkt
+   på kontoen (data-tema på <html>). */
 @media (prefers-color-scheme: dark) {
-  :root { --bg:#0f1418; --kort:#171d23; --tekst:#e6eaee; --dempet:#93a0ad;
+  :root:not([data-tema="lys"]) { --bg:#0f1418; --kort:#171d23; --tekst:#e6eaee; --dempet:#93a0ad;
           --kant:#28313a; --aksent:#5fb3e0; --aksent-2:#2f84b8; --aksent-lys:#16303f;
           --positiv:#4ec98a; --negativ:#e57373; --advarsel:#e0b05a;
-          --skygge: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.6); }
+          --skygge: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.6); color-scheme: dark; }
 }
+:root[data-tema="moerk"] { --bg:#0f1418; --kort:#171d23; --tekst:#e6eaee; --dempet:#93a0ad;
+          --kant:#28313a; --aksent:#5fb3e0; --aksent-2:#2f84b8; --aksent-lys:#16303f;
+          --positiv:#4ec98a; --negativ:#e57373; --advarsel:#e0b05a;
+          --skygge: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.6); color-scheme: dark; }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin:0; background:var(--bg); color:var(--tekst);

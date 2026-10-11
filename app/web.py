@@ -692,6 +692,13 @@ def konto_varsling(epost: str = Form(""), pushover: str = Form(""), varsel_epost
     return RedirectResponse("/konto?melding=Varsling+lagret", status_code=303)
 
 
+@app.post("/konto/tema")
+def konto_tema(tema: str = Form("auto"), con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+    con.execute("UPDATE brukere SET tema=? WHERE id=?", (tema if tema in ("auto", "lys", "moerk") else "auto", b["id"]))
+    con.commit()
+    return RedirectResponse("/konto", status_code=303)
+
+
 @app.post("/konto/varsling/test")
 def konto_varsling_test(kanal: str = Form(...), con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     u = auth.bruker(con, b["id"])

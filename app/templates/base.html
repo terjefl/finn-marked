@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="nb">
+<html lang="nb"{% if bruker and bruker.tema and bruker.tema != 'auto' %} data-tema="{{ bruker.tema }}"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -7,8 +7,10 @@
 <link rel="icon" href="/static/favicon.ico" sizes="32x32">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0f1418" media="(prefers-color-scheme: dark)">
+{% if bruker and bruker.tema == 'lys' %}<meta name="theme-color" content="#ffffff">
+{% elif bruker and bruker.tema == 'moerk' %}<meta name="theme-color" content="#0f1418">
+{% else %}<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1418" media="(prefers-color-scheme: dark)">{% endif %}
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="FINN-marked">

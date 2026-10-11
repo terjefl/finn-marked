@@ -87,6 +87,10 @@ MIGRERINGER: list[tuple[int, list[str]]] = [
     (8, [
         "ALTER TABLE brukere ADD COLUMN varsel_pushover INTEGER NOT NULL DEFAULT 1",
     ]),
+    # Tema per bruker: auto (følg systemet), lys eller moerk.
+    (9, [
+        "ALTER TABLE brukere ADD COLUMN tema TEXT NOT NULL DEFAULT 'auto'",
+    ]),
 ]
 
 SKJEMA = """
