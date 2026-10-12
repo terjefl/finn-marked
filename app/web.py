@@ -496,7 +496,8 @@ def _skjema_kontekst(v: dict | None, akse: dict | None = None) -> dict:
 
 
 def _forslag(con, v: dict) -> list[tuple[str, int]]:
-    annonser = db.ok(con, "SELECT undertittel FROM annonser WHERE slug=? AND aktiv=1", (v["slug"],))
+    annonser = db.ok(con, "SELECT tittel, undertittel, json_extract(ekstra, '$.merke') AS merke_navn "
+                          "FROM annonser WHERE slug=? AND aktiv=1", (v["slug"],))
     return analyse.kategoriforslag(annonser, v.get("kategorier"))
 
 

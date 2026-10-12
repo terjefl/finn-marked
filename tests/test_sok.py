@@ -54,6 +54,13 @@ def hoved() -> int:
            {"undertittel": "M50 · Laser · 2022 · 45 000 km"}, {"undertittel": None}, {"undertittel": "fully charged"}]
     sjekk("kategoriforslag", analyse.kategoriforslag(ann, {"m50": "M50"}), [("Fully Charged", 3), ("Laser", 2)])
     sjekk("kategoriforslag tomt", analyse.kategoriforslag([], {}), [])
+    traktorer = [{"tittel": t, "undertittel": None, "merke_navn": "John Deere"} for t in (
+        "John Deere 6215R - Trima frontlaster", "John Deere 6155R 4x4", "John Deere 6130R 4x4 m/ frontlaster",
+        "John Deere 5075E", "John Deere 6215R Trima frontlaster")]
+    sjekk("kategoriforslag fra tittel (traktor)", analyse.kategoriforslag(traktorer, {})[:4],
+          [("frontlaster", 3), ("4x4", 2), ("6215R", 2), ("Trima", 2)])
+    sjekk("kategoriforslag: merket holdes ute", any("john" in f.lower() or "deere" in f.lower()
+                                                   for f, _ in analyse.kategoriforslag(traktorer, {})), False)
     biler = [{"kilde_id": str(i), "pris": p, "km": 50000, "pris_type": "utropspris"} for i, p in enumerate((450000, 460000, 470000, 480000, 490000, 1857, 9000))]
     sjekk("urimelige priser", analyse.urimelige(biler), {"5", "6"})
     sjekk("oppsummer holder dem utenfor", (analyse.oppsummer(biler)["min"], analyse.oppsummer(biler)["antall_urimelig"]), (450000, 2))
