@@ -205,7 +205,8 @@ søket finner, og `page=` i URL-en strippes (vi paginerer selv). Et FINN-søk me
 lar den stå tom). Hver kategori merkes når nøkkelen eller visningsnavnet står som
 eget ord i tittel/undertittel — `fully` fanger «Fully Charged», `m50` fanger «M50».
 Etter første henting foreslår rediger-siden kategorier fra det som går igjen i
-undertitlene (f.eks. «Supercharged 17», «Laser 11»); klikk for å legge til. Ingen
+undertitlene (f.eks. «Supercharged 17», «Laser 11»), eller i titlene når undertittel
+mangler, som på traktor («frontlaster 12», «4x4 9»); klikk for å legge til. Ingen
 kodeendring trengs for nye merker.
 
 Importeren og eldre klienter kan fortsatt sende søk som tekst (`[kilde:][tag] | url`,

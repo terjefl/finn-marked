@@ -365,16 +365,30 @@ def kategoriforslag(annonser: list[dict], eksisterende: dict | None = None, maks
     så den splittes på skilletegn og frasene telles på tvers av annonsene. Rene tall,
     fraser som alt er kategorier, og fraser nesten alle annonsene har (modellnavnet)
     filtreres bort. Resultat: [(frase, antall)], flest først.
+
+    Traktor-annonser har ingen undertittel; der brukes tittelen uten merket («John Deere
+    6215R - Trima frontlaster» → «6215R», «Trima frontlaster»), og i tillegg enkeltordene
+    («Trima», «frontlaster», «4x4»), siden utstyret ofte står midt i en frase.
     """
     har = {str(v).lower() for v in (eksisterende or {}).values()} | {k.lower() for k in (eksisterende or {})}
     telling: dict[str, int] = {}
     visning: dict[str, str] = {}
     for a in annonser:
         sett: set[str] = set()
-        for frase in re.split(r"\s*[-–|/,·•∙]\s*|\s{2,}", a.get("undertittel") or ""):
-            f = re.sub(r"\s+", " ", frase).strip(" .!")
+        tekst = a.get("undertittel") or ""
+        fra_tittel = not tekst
+        if fra_tittel:
+            tekst = a.get("tittel") or ""
+            merke = (a.get("merke_navn") or "").strip()
+            if merke and tekst.lower().startswith(merke.lower()):
+                tekst = tekst[len(merke):]
+        fraser = re.split(r"\s*[-–|/,·•∙]\s*|\s{2,}", tekst)
+        if fra_tittel:
+            fraser += [o for o in re.split(r"\s+", tekst) if len(o) >= 3]
+        for frase in fraser:
+            f = re.sub(r"\s+", " ", frase).strip(" .!()")
             n = f.lower()
-            if len(n) < 2 or len(n) > 40 or n in har or re.fullmatch(r"[\d\s.,]+(km|kr)?", n):
+            if len(n) < 2 or len(n) > 40 or n in har or re.fullmatch(r"[\d\s.,]+(km|kr|t)?", n):
                 continue
             sett.add(n)
             visning.setdefault(n, f)
