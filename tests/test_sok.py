@@ -132,8 +132,19 @@ def test_finn_koder() -> None:
           finn.finn_merke_og_modell("BURSTNER", "BT6853", [{"navn": "Bürstner", "kode": "50", "param": "make", "modeller": []}])["merke"]["kode"], "50")
     sjekk("vertikal av URL", [finn.vertikal_av_url(u) for u in (
         "https://www.finn.no/mobility/search/car?variant=0.749", "https://www.finn.no/mobility/search/caravan/mobilehome?make=50",
-        "https://www.finn.no/mobility/search/caravan", "https://www.finn.no/mobility/search/mc?make=1")],
-          ["car", "mobilehome", "caravan", "mc"])
+        "https://www.finn.no/mobility/search/caravan", "https://www.finn.no/mobility/search/mc?make=1",
+        "https://www.finn.no/mobility/search/b2b/agriculturetractor?make=0.3154")],
+          ["car", "mobilehome", "caravan", "mc", "tractor"])
+    traktor = "https://www.finn.no/mobility/search/b2b/agriculturetractor?make=0.3154"
+    sjekk("sok_url traktor uten fuel", finn.sok_url("0.3154", 2015, True, vertikal="tractor", param="make"),
+          "https://www.finn.no/mobility/search/b2b/agriculturetractor?make=0.3154&year_from=2015&year_to=2015")
+    sjekk("sjekk_url traktor ok", sok.sjekk_url(traktor), None)
+    sjekk("sjekk_url ukjent vertikal", sok.sjekk_url("https://www.finn.no/mobility/search/boat?x=1") is not None, True)
+    sjekk("vakt_akse", [finn.vakt_akse(v) for v in (
+        {"sok": [{"url": traktor, "tag": "alle"}]},
+        {"sok": [{"kilde": "auksjonen", "url": "https://auksjonen.no/x"}, {"url": "https://www.finn.no/mobility/search/car?variant=0.749"}]},
+        {"sok": []}, {})],
+          ["timer", "km", "km", "km"])
     sjekk("api_url for bobil", finn.api_url("https://www.finn.no/mobility/search/caravan/mobilehome?make=50&page=2", 2),
           "https://www.finn.no/mobility/search/api/search/SEARCH_ID_CAR_MOBILE_HOME?make=50&page=2")
     sjekk("sok_url bobil", finn.sok_url("50", 2017, True, 2018, vertikal="mobilehome", param="make"),

@@ -145,6 +145,33 @@ def main() -> int:
         sjekk("les_api_side avviser svar uten docs", False, True)
     except RuntimeError:
         sjekk("les_api_side avviser svar uten docs", True, True)
+    sjekk("api: bil har ikke timer", d["timer"], None)
+
+    # Traktor: arbeidstimer i stedet for kilometer, ingen model_specification, år 0/1900 = ukjent
+    from app.kilder.finn import parse_detaljer
+    traktor = {"id": "478604228", "type": "motor", "heading": "Fiat 60-90", "year": 1987, "hours_used": 2758,
+               "mileage_unit": "KILOMETER", "make": "Fiat", "model": "60-90", "location": "Norheimsund",
+               "dealer_segment": "Privat", "timestamp": 1791833897000, "flags": [], "labels": [],
+               "price": {"amount": 185000, "currency_code": "NOK"}, "sales_form": 1,
+               "canonical_url": "https://www.finn.no/mobility/item/478604228"}
+    t = fra_api_doc(traktor)
+    sjekk("traktor: timer, ikke km", (t["timer"], t["km"]), (2758, None))
+    sjekk("traktor: tittel uten undertittel", (t["tittel"], t["undertittel"]), ("Fiat 60-90", None))
+    sjekk("traktor: år/pris/drivstoff", (t["aar"], t["pris"], t["drivstoff"], t["rekkevidde"]), (1987, 185000, None, None))
+    sjekk("traktor: merke/modell i ekstra", (t["ekstra"]["merke"], t["ekstra"]["modell"]), ("Fiat", "60-90"))
+    sjekk("traktor: år 1900 er ukjent", fra_api_doc(dict(traktor, year=1900))["aar"], None)
+    sjekk("traktor: uten timer", fra_api_doc({k: v for k, v in traktor.items() if k != "hours_used"})["timer"], None)
+    sjekk("api_url traktor", api_url("https://www.finn.no/mobility/search/b2b/agriculturetractor?make=0.3154&year_from=2015", 2),
+          "https://www.finn.no/mobility/search/api/search/SEARCH_ID_AGRICULTURE_TRACTOR?make=0.3154&year_from=2015&page=2")
+    tr_html = "<h1>Fiat 60-90</h1><dt>Modellår</dt><dd>1987</dd><dt>Vekt</dt><dd>Ikke oppgitt</dd><dt>Effekt</dt><dd>60 hk</dd>" \
+              "<dt>Arbeidstimer</dt><dd>2&nbsp;758</dd><h2>Beskrivelse</h2><p>Fin Fiat med lavt timeantal.</p><p>Selges privat.</p>" \
+              "<h2>Spesifikasjoner</h2><dt>Merke</dt><dd>Fiat</dd>"
+    pd = parse_detaljer(tr_html)
+    sjekk("parse_detaljer traktor: felter", (pd["felter"]["Arbeidstimer"], pd["felter"]["Effekt"], pd["felter"]["Vekt"],
+                                            pd["felter"]["Kilometerstand"]), ("2\xa0758", "60 hk", "Ikke oppgitt", None))
+    sjekk("parse_detaljer traktor: beskrivelse", pd["beskrivelse"].startswith("Fin Fiat med lavt timeantal. Selges privat."), True)
+    bil_html = "<button>Beskrivelse</button><dt>Kilometerstand</dt><dd>70 725 km</dd><h2>Om bilen</h2><p>Pen bil.</p>"
+    sjekk("parse_detaljer bil: «Om bilen» vinner over «Beskrivelse»", parse_detaljer(bil_html)["beskrivelse"].startswith("Pen bil."), True)
 
     print()
     if feil:

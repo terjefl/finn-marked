@@ -29,13 +29,18 @@ API_SOK = API_SOK_BASE + "SEARCH_ID_CAR_USED"
 #: FINN har én søkevertikal per kjøretøytype, med egen søkenøkkel, egen side og eget
 #: merketre. Bil har merke → modell (variant=1.<merke>.<modell>); de andre bare merke (make=).
 #: Sidene for bobil/campingvogn/MC rendres i nettleseren, så der finnes bare API-et.
+#: Traktor ligger under «Nyttekjøretøy og maskiner» (b2b) og oppgir arbeidstimer, ikke
+#: kilometer — `akse` sier hvilken måleenhet analysen skal regne verdifall mot (se analyse.AKSER).
 VERTIKALER: dict[str, dict] = {
-    "car": {"key": "SEARCH_ID_CAR_USED", "sti": "/mobility/search/car", "tre": "variant", "navn": "bil"},
+    "car": {"key": "SEARCH_ID_CAR_USED", "sti": "/mobility/search/car", "tre": "variant", "navn": "bil",
+            "akse": "km"},
     "mobilehome": {"key": "SEARCH_ID_CAR_MOBILE_HOME", "sti": "/mobility/search/caravan/mobilehome",
-                   "tre": "make", "navn": "bobil"},
+                   "tre": "make", "navn": "bobil", "akse": "km"},
     "caravan": {"key": "SEARCH_ID_CAR_CARAVAN", "sti": "/mobility/search/caravan", "tre": "make",
-                "navn": "campingvogn"},
-    "mc": {"key": "SEARCH_ID_MC_USED", "sti": "/mobility/search/mc", "tre": "make", "navn": "MC"},
+                "navn": "campingvogn", "akse": "km"},
+    "mc": {"key": "SEARCH_ID_MC_USED", "sti": "/mobility/search/mc", "tre": "make", "navn": "MC", "akse": "km"},
+    "tractor": {"key": "SEARCH_ID_AGRICULTURE_TRACTOR", "sti": "/mobility/search/b2b/agriculturetractor",
+                "tre": "make", "navn": "traktor", "akse": "timer"},
 }
 
 
@@ -47,7 +52,24 @@ def vertikal_av_url(url: str) -> str:
         return "caravan"
     if sti.endswith("/mc"):
         return "mc"
+    if sti.endswith("/agriculturetractor"):
+        return "tractor"
     return "car"
+
+
+def vakt_vertikal(v: dict) -> str:
+    """Vertikalen til vaktens første FINN-søk; «car» når vakten ikke har noe FINN-søk.
+    Vertikalen lagres ikke — den følger søke-URL-en, så den kan ikke komme i utakt."""
+    for s in v.get("sok") or []:
+        url = (s.get("url") or "") if isinstance(s, dict) else ""
+        if "finn.no" in url:
+            return vertikal_av_url(url)
+    return "car"
+
+
+def vakt_akse(v: dict) -> str:
+    """«km» eller «timer»: hva annonsene i vakten måler slitasje i."""
+    return VERTIKALER[vakt_vertikal(v)]["akse"]
 
 
 def hent(url: str, timeout: int = 40, forsok: int = 3) -> str:
@@ -214,7 +236,7 @@ def forhandsvis(url: str, antall: int = 3) -> dict:
             ann, treff, sider = les_side(hent(url))
     kort = list(ann.values())
     return {"treff": treff, "sider": sider, "kort_pa_siden": len(kort),
-            "eksempler": [{k: a.get(k) for k in ("tittel", "undertittel", "pris", "km", "aar", "url")}
+            "eksempler": [{k: a.get(k) for k in ("tittel", "undertittel", "pris", "km", "timer", "aar", "url")}
                           for a in kort[:antall]],
             "titler": [a.get("tittel") for a in kort]}
 
@@ -239,7 +261,13 @@ def hent_sok(url: str, logg=lambda m: None) -> tuple[list[dict], int, int]:
 
 def hent_detaljer(url: str) -> dict:
     """Leser detaljsiden: spesifikasjoner, utstyrsliste og beskrivelse."""
-    h = hent(url)
+    return parse_detaljer(hent(url))
+
+
+def parse_detaljer(h: str) -> dict:
+    """Detaljsidens HTML → {felter, utstyr, beskrivelse}. Bil-sider har «Om bilen» og
+    «Kilometerstand»; traktor-sider «Beskrivelse», «Arbeidstimer», «Effekt» og «Vekt».
+    Etiketter som mangler gir None, så samme parser dekker begge."""
     tekst = htmllib.unescape(re.sub(r"<[^>]+>", "\n", h))
     linjer = [linje.strip() for linje in re.sub(r"\n{2,}", "\n", tekst).splitlines() if linje.strip()]
 
@@ -258,13 +286,15 @@ def hent_detaljer(url: str) -> dict:
                       if linjer[j] in ("Vis hele beskrivelsen", "Beskrivelse", "Om bilen")), i + 120)
         utstyr = ", ".join(linjer[i + 1:slutt])[:4000]
     beskrivelse = ""
-    for anker in ("Beskrivelse av varen", "Om bilen"):
+    # «Beskrivelse» sist: bil-sider har gjerne både «Om bilen» og en «Beskrivelse»-knapp.
+    for anker in ("Beskrivelse av varen", "Om bilen", "Beskrivelse"):
         if anker in linjer:
             i = linjer.index(anker)
             beskrivelse = re.sub(r"\s+", " ", " ".join(linjer[i + 1:i + 300]))[:3000]
             break
     felter = {k: etter(k) for k in ("Modellår", "Kilometerstand", "Batterikapasitet", "Rekkevidde (WLTP)",
-                                    "1. gang registrert", "Eiere", "Garanti", "Salgsform", "Farge")}
+                                    "1. gang registrert", "Eiere", "Garanti", "Salgsform", "Farge",
+                                    "Arbeidstimer", "Effekt", "Vekt")}
     return {"felter": felter, "utstyr": utstyr, "beskrivelse": beskrivelse}
 
 
@@ -279,7 +309,7 @@ def i_dag() -> str:
 def api_url(sokeurl: str, side: int = 1) -> str:
     """Søkesidens URL → API-URL med samme parametre. Søkesiden kaller selv dette
     API-et, så filtrene (variant, year_from, q, fuel …) er de samme. `page` byttes,
-    og søkenøkkelen følger vertikalen i stien (bil, bobil, campingvogn, MC)."""
+    og søkenøkkelen følger vertikalen i stien (bil, bobil, campingvogn, MC, traktor)."""
     deler = urllib.parse.urlsplit(sokeurl)
     q = [(k, v) for k, v in urllib.parse.parse_qsl(deler.query, keep_blank_values=False) if k != "page"]
     if side > 1:
@@ -307,6 +337,10 @@ def fra_api_doc(d: dict) -> dict | None:
     pris = int(pris) if isinstance(pris, int | float) and pris > 0 else None
     km = d.get("mileage")
     km = int(km) if isinstance(km, int | float) and km >= 0 else None
+    timer = d.get("hours_used")                      # traktor: arbeidstimer i stedet for km
+    timer = int(timer) if isinstance(timer, int | float) and timer >= 0 else None
+    aar = d.get("year")                              # traktor-annonser bruker 0/1900 for «ukjent»
+    aar = int(aar) if isinstance(aar, int | float) and aar > 1900 else None
     reg = d.get("registration_class")
     reg = reg.get("value") if isinstance(reg, dict) else reg
     return {
@@ -315,8 +349,9 @@ def fra_api_doc(d: dict) -> dict | None:
         "url": d.get("canonical_url") or f"https://www.finn.no/mobility/item/{finn_id}",
         "tittel": (d.get("heading") or "").strip() or None,
         "undertittel": (d.get("model_specification") or "").strip() or None,
-        "aar": int(d["year"]) if isinstance(d.get("year"), int | float) else None,
+        "aar": aar,
         "km": km,
+        "timer": timer,
         "drivstoff": d.get("fuel") or None,
         "rekkevidde": int(d["driving_range"]) if isinstance(d.get("driving_range"), int | float) else None,
         "pris": pris,
@@ -382,7 +417,7 @@ def hent_sok_valgt(url: str, logg=lambda m: None) -> tuple[list[dict], int, int]
         return hent_sok_api(url, logg)
     except (RuntimeError, ValueError) as e:
         if vertikal_av_url(url) != "car":
-            raise                                  # ingen HTML-reserve for bobil/campingvogn/MC
+            raise                                  # ingen HTML-reserve for bobil/campingvogn/MC/traktor
         logg(f"FINN-API-et feilet ({e}); prøver HTML-siden")
         return hent_sok(url, logg)
 

@@ -236,6 +236,49 @@ def hoved() -> int:
         innsamling.hent_vakt(con, v_k2)
         sjekk("globalt av på kontoen: ingenting sendes", (varsling.etter_henting(con, db.vakt(con, "kjop"), fra), sendt), (None, []))
 
+        # 11) Traktor: aksen følger FINN-URL-en (ikke kilden), timer lagres, indeks ved 3 000 t
+        traktor_url = "https://www.finn.no/mobility/search/b2b/agriculturetractor?make=0.3154"
+        v_t = dict(v, slug="traktor", sok=[{"kilde": "falsk", "tag": "alle", "url": traktor_url}], egen_timer=2500)
+        db.lagre_vakt(con, v_t)
+        sjekk("traktor: egen_timer lagret og formål eier", (db.vakt(con, "traktor")["egen_timer"], db.vakt(con, "traktor")["formaal"]),
+              (2500, "eier"))
+        traktorer = [dict(annonse(str(500 + i), pris=600000 - i * 50000), km=None, timer=1000 + i * 1000, tittel=f"Traktor {i}")
+                     for i in range(5)]
+        _FEED["annonser"] = traktorer
+        _FEED["treff"] = 5
+        innsamling.hent_vakt(con, v_t)
+        sjekk("traktor: timer lagret, km NULL",
+              tuple(con.execute("SELECT timer, km FROM annonser WHERE slug='traktor' AND kilde_id='502'").fetchone()), (3000, None))
+        rad = con.execute("SELECT indeks, ref_km, ref_timer FROM kjøringer WHERE slug='traktor' ORDER BY rowid DESC LIMIT 1").fetchone()
+        sjekk("traktor: indeks ved 3 000 t, ref_km NULL", (rad["indeks"], rad["ref_km"], rad["ref_timer"]),
+              (500000, None, analyse.AKSER["timer"]["ref"]))
+        _FEED["annonser"] = [dict(traktorer[0], solgt=True, pris_type="solgt", merke="Solgt")] + traktorer[1:4]
+        _FEED["treff"] = 4
+        innsamling.hent_vakt(con, v_t)
+        th = [t for t in hendelser(con) if t[0] in ("solgt", "borte") and "Traktor" in t[1]]
+        sjekk("traktor: hendelsestekster i timer", [h[1].split("(")[1].split(",")[0] for h in th], ["1000 t", "5000 t"])
+        sjekk("bil-vakten har fortsatt ref_km",
+              con.execute("SELECT ref_km, ref_timer FROM kjøringer WHERE slug='test' AND indeks IS NOT NULL LIMIT 1").fetchone()[0], analyse.REF_KM)
+        # Analysefunksjonene med timer-aksen; bil-kallene uten akse er uendret
+        t_akse = analyse.AKSER["timer"]
+        ann = [dict(a, kilde_id=a["kilde_id"]) for a in traktorer]
+        sjekk("oppsummer timer", (analyse.oppsummer(ann, t_akse)["timer_median"], "km_median" in analyse.oppsummer(ann, t_akse)), (3000, False))
+        k = analyse.verdikurve(ann, 3000, t_akse)
+        sjekk("verdikurve timer: estimat og per 100 t", (round(k["estimat"]), round(k["per_enhet"]), k["egen"]), (500000, 5000, 3000))
+        sjekk("km_botter timer: 500-bøtter", [(b["fra"], b["til"]) for b in analyse.km_botter(ann, akse=t_akse)][:2], [(1000, 1500), (2000, 2500)])
+        sjekk("nabolag timer ±500", analyse.nabolag(ann, 3200, akse=t_akse)["antall"], 1)
+        sjekk("kjoperliste maks_timer", sorted(r["kilde_id"] for r in analyse.kjoperliste(ann, k, {"maks_timer": 2000}, akse=t_akse)), ["500", "501"])
+        svg = analyse.svg_kurve(ann, 3000, akse=t_akse)
+        sjekk("svg_kurve timer: aksetekst", ("Arbeidstimer" in svg, "Kilometerstand" in svg), (True, False))
+        sjekk("svg_historikk timer: pris ved 3 000 t", "pris ved 3 000 t" in analyse.svg_historikk(
+            analyse.historikk(con, "traktor") * 2, akse=t_akse), True)
+        biler = [dict(annonse(str(i), pris=300000 - i * 20000), km=20000 + i * 20000) for i in range(5)]
+        sjekk("bil uten akse: uendret", (analyse.oppsummer(biler)["km_median"], analyse.verdikurve(biler, 60000)["per_1000km"]),
+              (60000, 1000.0))
+        sjekk("urimelige: hjulsett til 20 000 holdes utenfor", analyse.urimelige(ann + [dict(annonse("599", pris=20000), timer=None)], t_akse), {"599"})
+        sjekk("urimelige: traktor til 60 000 (12 %) er med", analyse.urimelige(ann + [dict(annonse("598", pris=60000), timer=7000)], t_akse), set())
+        sjekk("urimelige: bil-faktor 10 %", analyse.urimelige(biler + [dict(annonse("99", pris=20000))]), {"99"})
+
         con.close()
     finally:
         shutil.rmtree(mappe, ignore_errors=True)

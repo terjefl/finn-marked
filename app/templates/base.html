@@ -20,11 +20,12 @@
 </head>
 <body>
 <header>
-  <a class="logo" href="/"><img src="/static/ikon/merke.svg" alt="">FINN-marked<small>bruktbil over tid</small></a>
+  <a class="logo" href="/"><img src="/static/ikon/merke.svg" alt="">FINN-marked<small>bruktbil og traktor over tid</small></a>
   <nav>
     {% if bruker %}
       <a href="/">Oversikt</a>
       <a href="/vakt/ny">Følg bil</a>
+      <a href="/vakt/ny?type=traktor">Følg traktor</a>
       <a href="/oppslag">Oppslag</a>
       {% if bruker.rolle == 'admin' %}<a href="/admin/brukere">Brukere</a>{% endif %}
       <a href="/konto" class="meg">{{ bruker.navn }}</a>

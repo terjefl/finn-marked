@@ -1,0 +1,166 @@
+{# Traktor-vakt: arver bil-siden og bytter ut seksjonene som snakker om kilometer.
+   Hendelser, prisutvikling-grafen, salgstakt og hentingshistorikk er felles. #}
+{% extends "vakt.html" %}
+
+{% block nokkeltall %}
+<div class="rutenett">
+  <div class="kort"><div class="dempet">Til salgs</div><div class="nokkel">{{ filtrert_oppsummering.antall }}</div>
+       <div class="dempet">{{ filtrert_oppsummering.antall_pris }} med utropspris{% if filtrert_oppsummering.antall_urimelig %} · {{ filtrert_oppsummering.antall_urimelig }} med urimelig pris holdt utenfor{% endif %}</div></div>
+  <div class="kort"><div class="dempet">Median</div>
+       <div class="nokkel">{{ filtrert_oppsummering.median | kr }}</div>
+       {% if filtrert_oppsummering.p25 %}<div class="dempet">25/75: {{ filtrert_oppsummering.p25 | kr }} /
+       {{ filtrert_oppsummering.p75 | kr }}</div>{% endif %}</div>
+  <div class="kort"><div class="dempet">Timer (median)</div>
+       <div class="nokkel">{{ filtrert_oppsummering.timer_median | kr }}</div>
+       <div class="dempet">{% if filtrert_oppsummering.timer_min is defined %}spenn {{ filtrert_oppsummering.timer_min | kr }}–{{ filtrert_oppsummering.timer_max | kr }} t{% else %}ingen annonser oppgir timer{% endif %}</div></div>
+  <div class="kort"><div class="dempet">Solgt (registrert)</div><div class="nokkel">{{ solgte | length }}</div>
+       <div class="dempet">{% if liggetid %}median liggetid {{ liggetid.median | round | int }} dager ({{ liggetid.min }}–{{ liggetid.max }}){% else %}FINN markerer solgte annonser i søket{% endif %}</div></div>
+</div>
+{% endblock %}
+
+{% block kandidater %}
+{% if v.formaal == 'kjoper' %}
+<div class="kort" style="border-left:4px solid var(--positiv)">
+  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:baseline">
+    <h2 style="margin:0">Kandidater{% if v.kriterier %} som oppfyller kriteriene{% endif %} ({{ kjoperliste | length }})</h2>
+    <div class="dempet">
+      {% if v.kriterier.maks_pris %}≤ {{ v.kriterier.maks_pris | kr }} kr · {% endif %}
+      {% if v.kriterier.maks_timer %}≤ {{ v.kriterier.maks_timer | kr }} t · {% endif %}
+      {% if v.kriterier.aar_fra or v.kriterier.aar_til %}{{ v.kriterier.aar_fra or '' }}–{{ v.kriterier.aar_til or '' }} · {% endif %}
+      {% for k in v.kriterier.kategorier or [] %}{{ k }} · {% endfor %}
+      <a href="/vakt/{{ v.slug }}/rediger">endre</a>
+    </div>
+  </div>
+  <div class="rutenett" style="margin:12px 0">
+    <div><div class="dempet">Prisnivå siste 30 dager</div>
+      <div class="estimat">{% if indeks_trend %}{{ '+' if indeks_trend.diff > 0 }}{{ indeks_trend.pct }} %{% else %}–{% endif %}</div>
+      <div class="dempet">{% if indeks_trend %}indeks {{ indeks_trend.naa | kr }} mot {{ indeks_trend.foer | kr }} for {{ indeks_trend.dager }} dager siden{% else %}kommer etter noen hentinger{% endif %}</div></div>
+    <div><div class="dempet">Beste avvik fra forventet pris</div>
+      <div class="estimat">{% if kjoperliste and kjoperliste[0].avvik is not none %}{{ kjoperliste[0].avvik | kr }} kr{% else %}–{% endif %}</div>
+      <div class="dempet">negativt = billigere enn linja tilsier for timetallet</div></div>
+    <div><div class="dempet">Nye kandidater siste 7 dager</div>
+      <div class="estimat">{{ kjoperliste | selectattr('ligget', 'ne', none) | selectattr('ligget', 'le', 7) | list | length }}</div>
+      <div class="dempet">{{ kjoperliste | selectattr('ligget', 'ne', none) | selectattr('ligget', 'ge', 30) | list | length }} har ligget over 30 dager</div></div>
+  </div>
+  {% if kjoperliste %}
+  <div class="tabell"><table>
+    <thead><tr><th>Pris</th><th>Avvik</th><th>Timer</th><th class="skjul-m">År</th><th>Annonse</th><th>Ligget</th><th class="skjul-m">Sted</th></tr></thead>
+    <tbody>
+    {% for a in kjoperliste[:25] %}
+      <tr>
+        <td class="tall">{{ a.pris | kr }}</td>
+        <td class="tall" style="color:{{ 'var(--positiv)' if a.avvik is not none and a.avvik < 0 else 'var(--dempet)' }}">{% if a.avvik is not none %}{{ '+' if a.avvik > 0 }}{{ a.avvik | kr }} <span class="dempet">({{ a.avvik_pct }} %)</span>{% else %}–{% endif %}</td>
+        <td class="tall">{{ a.timer | kr }}</td>
+        <td class="skjul-m">{{ a.aar or '–' }}</td>
+        <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or '' }}</a>
+            <span class="bare-m dempet"><br>{{ a.aar or '' }}{% if a.sted %} · {{ a.sted }}{% endif %}</span></td>
+        <td class="dempet">{% if a.ligget is not none %}{{ a.ligget }} d{% else %}–{% endif %}</td>
+        <td class="skjul-m">{{ a.sted or '–' }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% if kjoperliste | length > 25 %}<p class="dempet">Viser de 25 beste av {{ kjoperliste | length }}.</p>{% endif %}
+  {% else %}
+  <p class="dempet">Ingen annonser oppfyller kriteriene akkurat nå. Lang liggetid gir forhandlingsrom; stigende tilbud og fallende indeks er kjøpers marked.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block egen_kjoretoy %}
+{% if v.kjoretoy or v.egen_bil or v.egen_timer %}
+<div class="kort bil">
+  <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:baseline">
+    <div><span class="dempet">Egen traktor</span><br><strong style="font-size:17px">{{ v.egen_bil or (v.kjoretoy.beskrivelse if v.kjoretoy) or '–' }}</strong>
+      {% if v.kjoretoy %}<span class="pill" style="margin-left:6px">{{ v.kjoretoy.regnr }}</span>{% endif %}</div>
+    {% if v.egen_timer %}<div class="dempet">{{ v.egen_timer | kr }} t på telleren</div>{% endif %}
+  </div>
+  {% if v.kjoretoy %}
+  <div class="dempet" style="margin-top:6px">
+    {% if v.kjoretoy.forste_registrert %}Først registrert {{ v.kjoretoy.forste_registrert }}{% endif %}
+    {% if v.kjoretoy.registrert_paa_eier %} · på deg siden {{ v.kjoretoy.registrert_paa_eier[:10] }}{% endif %}
+    {% if v.kjoretoy.effekt_kw %} · {{ (v.kjoretoy.effekt_kw * 1.36) | round | int }} hk{% endif %}
+    {% if v.kjoretoy.egenvekt %} · {{ v.kjoretoy.egenvekt | kr }} kg egenvekt{% endif %}
+    {% if v.kjoretoy.drivhjul %} · {{ v.kjoretoy.drivhjul | lower }}{% endif %}
+    {% if v.kjoretoy.status and v.kjoretoy.status != 'Registrert' %} · {{ v.kjoretoy.status }}{% endif %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block kurve %}
+{% if kurve %}
+<div class="kort">
+  <h2 style="margin-top:0">Pris mot arbeidstimer</h2>
+  <div class="slider">
+    <label for="timer" style="margin:0">{{ 'Ønsket timetall:' if v.formaal == 'kjoper' else 'Dine timer:' }}</label>
+    {% set t_maks = ((kurve.serie | map(attribute=0) | max) // akse.steg + 1) * akse.steg %}
+    <input type="range" id="timer" min="0" max="{{ t_maks }}" step="{{ akse.glider_steg }}" value="{{ kurve.egen or akse.ref }}"
+           data-min="{{ kurve.serie | map(attribute=0) | min }}" data-maks="{{ kurve.serie | map(attribute=0) | max }}">
+    <span class="dempet" id="timervis">{{ kurve.egen or akse.ref }} t</span>
+  </div>
+  <div class="rutenett">
+    <div><div class="dempet">Estimert utropspris (regresjon)</div>
+         <div class="estimat" id="est">–</div>
+         <div class="dempet">{{ kurve.n }} annonser · R² {{ "%.2f" | format(kurve.r2) }} · ±{{ kurve.sd | kr }} (1 std.avvik)</div></div>
+    <div><div class="dempet">Sammenlignbare ±{{ akse.vindu | kr }} t</div>
+         <div class="estimat" id="nabo">–</div>
+         <div class="dempet" id="naboant">–</div></div>
+    <div><div class="dempet">Verdifall per {{ akse.per }} timer</div>
+         <div class="estimat">{{ kurve.per_enhet | kr }} kr</div>
+         <div class="dempet">utropspris-nivå, ikke oppnådd pris</div></div>
+  </div>
+  {{ svg | safe }}
+  <p class="dempet" style="margin:8px 0 0">Annonser uten oppgitt timetall er ikke med i kurven. Traktorer med lavt timetall og
+    høy alder kan ligge langt fra linja — årsmodell-filteret under gjør sammenligningen jevnere.</p>
+</div>
+<script>
+(() => {
+  const serie = {{ kurve.serie | tojson }};
+  const a = {{ kurve.a }}, b = {{ kurve.b }};
+  const vindu = {{ akse.vindu }};
+  const felt = document.getElementById('timer');
+  const vis = document.getElementById('timervis');
+  const est = document.getElementById('est');
+  const nabo = document.getElementById('nabo');
+  const naboAnt = document.getElementById('naboant');
+  const kr = n => Math.round(n).toLocaleString('nb-NO').replace(/,/g, ' ') + ' kr';
+  const dataMin = +felt.dataset.min, dataMaks = +felt.dataset.maks;
+  const oppdater = () => {
+    const t = +felt.value;
+    const utenfor = t < dataMin || t > dataMaks;
+    vis.textContent = t.toLocaleString('nb-NO') + ' t' + (utenfor ? ' (utenfor annonsene, linja forlenges)' : '');
+    est.textContent = kr(Math.max(0, a + b * t));
+    const n = serie.filter(p => Math.abs(p[0] - t) <= vindu).map(p => p[1]).sort((x, y) => x - y);
+    nabo.textContent = n.length ? kr(n[Math.floor(n.length / 2)]) : '–';
+    naboAnt.textContent = n.length ? n.length + ' annonser: ' + kr(n[0]) + ' – ' + kr(n[n.length - 1]) : 'ingen i nabolaget';
+  };
+  felt.addEventListener('input', oppdater);
+  oppdater();
+})();
+</script>
+{% endif %}
+{% endblock %}
+
+{% block botter %}
+<h2>Pris per timeintervall</h2>
+<div class="tabell"><table>
+  <thead><tr><th>Timer</th><th>Antall</th><th>Median utropspris</th></tr></thead>
+  <tbody>
+  {% for b in botter %}
+    <tr><td style="white-space:nowrap">{{ b.fra | kr }}–{{ b.til | kr }} t</td><td>{{ b.antall }}</td>
+        <td>{{ b.median | kr }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}
+
+{% block sok_plassholder %}fritekst i tittel (f.eks. frontlaster, krypegir, firehjulstrekk){% endblock %}
+{% block tilsalgs_kolonne %}Timer{% endblock %}
+{% block tilsalgs_verdi scoped %}{{ a.timer | kr }}{% endblock %}
+{% block solgt_verdi scoped %}{{ a.timer | kr }}{% endblock %}
+
+{% block prisutvikling_tekst %}Indeksen er regresjonens pris ved fast timetall ({{ akse.ref | kr }} t), så den ikke faller bare fordi
+    traktorene i markedet blir eldre.{% endblock %}

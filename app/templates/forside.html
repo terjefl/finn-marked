@@ -2,7 +2,8 @@
 {% block tittel %}Oversikt — FINN-marked{% endblock %}
 {% block innhold %}
 <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap">
-  <h1>{{ 'Alle biler som følges' if vis_alle else 'Biler du følger' }}</h1>
+  {% set hva = 'traktorer' if (traktorer and not biler) else ('biler og traktorer' if traktorer else 'biler') %}
+  <h1>{{ 'Alle ' ~ hva ~ ' som følges' if vis_alle else hva | capitalize ~ ' du følger' }}</h1>
   <div class="filtre" style="margin:0">
     {% set q = ('&alle=1' if vis_alle else '') %}
     <a href="/?formaal={{ q }}" class="{{ 'aktiv' if not formaal }}">alle</a>
@@ -14,13 +15,15 @@
   </div>
 </div>
 <p class="dempet">
-  Når du følger en bil, for eksempel BMW i4 2022, ser du alt som er til salgs av den: priser, salg og verdikurve. Det hentes
-  automatisk én gang i døgnet, og kan oppdateres manuelt når som helst.
+  Når du følger en bil, for eksempel BMW i4 2022, eller en traktor, ser du alt som er til salgs av den: priser, salg og
+  verdikurve. Det hentes automatisk én gang i døgnet, og kan oppdateres manuelt når som helst.
 </p>
 
 {% for r in oversikt %}
 {% if vis_alle and (loop.first or r.eier != loop.previtem.eier) %}
 <h2 style="margin:22px 0 8px">{{ 'Mine' if r.egen else r.eier }}</h2>
+{% elif not vis_alle and biler and traktorer and (loop.first or r.akse.felt != loop.previtem.akse.felt) %}
+<h2 style="margin:22px 0 8px">{{ 'Traktorer' if r.akse.felt == 'timer' else 'Biler' }}</h2>
 {% endif %}
 <div class="kort vakt-kort">
   <div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap">
@@ -29,7 +32,8 @@
       {% if not r.v.aktiv %}<span class="pill">av</span>{% endif %}
       {% if r.eier and not r.egen %}<span class="pill">{{ r.eier }}</span>{% endif %}
       <span class="pill {{ 'v0' if r.v.formaal == 'kjoper' else 'v1' }}">{{ 'kjøper' if r.v.formaal == 'kjoper' else 'eier' }}</span>
-      {% if r.v.egen_bil %}<div class="dempet">{{ r.v.egen_bil }}{% if r.v.egen_km %} · {{ "{:,}".format(r.v.egen_km).replace(",", " ") }} km{% endif %}</div>{% endif %}
+      {% if r.akse.felt == 'timer' and (vis_alle or not biler) %}<span class="pill v2">traktor</span>{% endif %}
+      {% if r.v.egen_bil %}<div class="dempet">{{ r.v.egen_bil }}{% if r.egen_verdi %} · {{ r.egen_verdi | kr }} {{ r.akse.enhet }}{% endif %}</div>{% endif %}
     </div>
     <div class="dempet">
       {{ r.v.sok | length }} søk ·
@@ -58,9 +62,10 @@
 {% else %}
 <div class="kort tom">
   {% include "ikon/illustrasjon.svg" %}
-  <h2 style="margin-top:0">Du følger ingen biler ennå</h2>
-  <p class="dempet">Skriv inn et registreringsnummer eller lim inn et søk fra finn.no, så følger appen bilen for deg.</p>
+  <h2 style="margin-top:0">Du følger ingen biler eller traktorer ennå</h2>
+  <p class="dempet">Skriv inn et registreringsnummer eller lim inn et søk fra finn.no, så følger appen kjøretøyet for deg.</p>
   <a href="/vakt/ny" class="knapp-lenke"><button>Følg en bil</button></a>
+  <a href="/vakt/ny?type=traktor" class="knapp-lenke"><button class="lett">Følg en traktor</button></a>
 </div>
 {% endfor %}
 {% endblock %}

@@ -1,4 +1,8 @@
-"""Analyse: medianer, km-bøtter, verdikurve og SVG-diagram for web-sidene."""
+"""Analyse: medianer, bøtter, verdikurve og SVG-diagram for web-sidene.
+
+Alt regnes mot en «akse» — det annonsene måler slitasje i. Bil, bobil, campingvogn og MC
+bruker kilometer; traktor bruker arbeidstimer. Funksjonene tar aksen som valgfri siste
+parameter med km som standard, så bil-kallene er uendret."""
 
 from __future__ import annotations
 
@@ -47,38 +51,79 @@ def km_str(n) -> str:
         return "–"
 
 
+def timer_str(n) -> str:
+    if n is None or n == "":
+        return "–"
+    try:
+        return f"{n:,}".replace(",", " ") + " t"
+    except (TypeError, ValueError):
+        return "–"
+
+
 def er_utropspris(a: dict) -> bool:
     """Utropspris/fastpris er «hva selger ber om». Bud på auksjon er ikke det —
     de holdes utenfor median, kurve og km-bøtter, men vises i annonselisten."""
     return (a.get("pris_type") or "utropspris") in ("utropspris", "fastpris")
 
 
-REF_KM = 60_000          # kilometerstanden prisindeksen regnes ved
-PRIS_GULV = 10_000       # kr: under dette er det aldri en bilpris
-PRIS_FAKTOR = 0.1        # … og under 10 % av medianen er det en månedspris, en feiltasting e.l.
+#: Aksene: hva verdifallet regnes mot. Feltnavnene peker på kolonner i annonser (felt),
+#: vakter (egen_felt), kjøringer (ref_felt) og nøkkelen i vaktens kriterier (krit).
+#: Tallene for timer er startverdier (traktorer har typisk 1–8 000 t) og bor bare her.
+AKSER: dict[str, dict] = {
+    "km": {"felt": "km", "egen_felt": "egen_km", "ref_felt": "ref_km", "krit": "maks_km", "ord": "bil",
+           "navn": "Kilometerstand", "kort": "Km", "enhet": "km",
+           "ref": 60_000,           # kilometerstanden prisindeksen regnes ved
+           "steg": 10_000,          # bøttestørrelse
+           "vindu": 10_000,         # «sammenlignbare» = ± dette
+           "per": 1_000,            # «verdifall per 1 000 km»
+           "glider_steg": 1_000, "marg": 5_000,
+           "pris_faktor": 0.1},     # under 10 % av medianen er det en månedspris, en feiltasting e.l.
+    "timer": {"felt": "timer", "egen_felt": "egen_timer", "ref_felt": "ref_timer", "krit": "maks_timer",
+              "ord": "traktor", "navn": "Arbeidstimer", "kort": "Timer", "enhet": "t",
+              "ref": 3_000, "steg": 500, "vindu": 500, "per": 100, "glider_steg": 50, "marg": 250,
+              # Samme terskel som bil: forhandlere legger hjulsett og annet utstyr i traktor-vertikalen
+              # med traktormerket som merke (25–50 000 kr mot en median på 700 000), og 10 % holder
+              # dem utenfor median og kurve når søket er låst til merke og årsmodell.
+              "pris_faktor": 0.1},
+}
+KM = AKSER["km"]
+REF_KM = KM["ref"]       # kilometerstanden prisindeksen regnes ved (bil)
+PRIS_GULV = 10_000       # kr: under dette er det aldri en kjøretøypris
+PRIS_FAKTOR = KM["pris_faktor"]
 
 
-def urimelige(annonser: list[dict]) -> set:
+def akse_tekst(akse: dict, v) -> str:
+    """Kort aksemerke: «60k km», «3 000 t»."""
+    if akse["felt"] == "km":
+        return f"{v/1000:.0f}k km"
+    return f"{kr(v)} {akse['enhet']}"
+
+
+def urimelige(annonser: list[dict], akse: dict = KM) -> set:
     """Kilde-id-er for annonser med urimelig lav pris: under 10 000 kr, eller under
-    10 % av medianen av utropsprisene. Leasingannonser med månedspris (1 857 kr) og
-    feiltastinger trekker ellers median, kurve og min ned."""
+    en andel (aksens pris_faktor, 10 % for bil) av medianen av utropsprisene.
+    Leasingannonser med månedspris (1 857 kr) og feiltastinger trekker ellers median,
+    kurve og min ned."""
     priser = sorted(a["pris"] for a in annonser if a.get("pris") and er_utropspris(a))
     grense = PRIS_GULV
     if len(priser) >= 5:
-        grense = max(grense, statistics.median(priser) * PRIS_FAKTOR)
+        grense = max(grense, statistics.median(priser) * akse["pris_faktor"])
     return {a.get("kilde_id") for a in annonser if a.get("pris") and er_utropspris(a) and a["pris"] < grense}
 
 
-def brukbare(annonser: list[dict]) -> list[dict]:
+def brukbare(annonser: list[dict], akse: dict = KM) -> list[dict]:
     """Annonsene uten de urimelige — det statistikken og kurvene regner på."""
-    ut = urimelige(annonser)
+    ut = urimelige(annonser, akse)
     return [a for a in annonser if a.get("kilde_id") not in ut] if ut else annonser
 
 
-def oppsummer(annonser: list[dict]) -> dict:
-    ute = urimelige(annonser)
+def oppsummer(annonser: list[dict], akse: dict = KM) -> dict:
+    """Nøkkeltall. Slitasjetallene heter <felt>_median/_min/_max: km_median for bil,
+    timer_median for traktor."""
+    felt = akse["felt"]
+    ute = urimelige(annonser, akse)
     priser = sorted(a["pris"] for a in annonser if a.get("pris") and er_utropspris(a) and a.get("kilde_id") not in ute)
-    kms = sorted(a["km"] for a in annonser if a.get("km"))
+    kms = sorted(a[felt] for a in annonser if a.get(felt))
     ut = {"antall": len(annonser), "antall_pris": len(priser), "antall_urimelig": len(ute),
           "antall_bud": sum(1 for a in annonser if (a.get("pris_type") == "bud"))}
     if priser:
@@ -89,15 +134,17 @@ def oppsummer(annonser: list[dict]) -> dict:
             "p25": priser[len(priser) // 4], "p75": priser[3 * len(priser) // 4],
         })
     if kms:
-        ut["km_median"] = statistics.median(kms)
-        ut["km_min"], ut["km_max"] = kms[0], kms[-1]
+        ut[f"{felt}_median"] = statistics.median(kms)
+        ut[f"{felt}_min"], ut[f"{felt}_max"] = kms[0], kms[-1]
     return ut
 
 
-def verdikurve(annonser: list[dict], egen_km: int | None = None) -> dict | None:
-    """Kurve på utropspriser. Estimatet er utropspris-nivå, ikke oppnådd pris."""
-    annonser = brukbare(annonser)
-    par = [(a["km"], a["pris"]) for a in annonser if a.get("km") and a.get("pris") and er_utropspris(a)]
+def verdikurve(annonser: list[dict], egen: int | None = None, akse: dict = KM) -> dict | None:
+    """Kurve på utropspriser mot aksen. Estimatet er utropspris-nivå, ikke oppnådd pris.
+    `egen` er eierens egen kilometerstand/timetall (estimatet regnes der)."""
+    felt = akse["felt"]
+    annonser = brukbare(annonser, akse)
+    par = [(a[felt], a["pris"]) for a in annonser if a.get(felt) and a.get("pris") and er_utropspris(a)]
     if len(par) < 5:
         return None
     x = [p[0] for p in par]
@@ -106,28 +153,35 @@ def verdikurve(annonser: list[dict], egen_km: int | None = None) -> dict | None:
     resid = [yi - (a_ + b_ * xi) for xi, yi in zip(x, y)]
     return {
         "n": len(par), "a": a_, "b": b_, "r2": r2, "sd": statistics.pstdev(resid),
-        "per_1000km": abs(b_) * 1000,
-        "estimat": (a_ + b_ * egen_km) if egen_km else None,
-        "egen_km": egen_km,
+        "per_1000km": abs(b_) * 1000,            # beholdt for bil-malen og API-et
+        "per_enhet": abs(b_) * akse["per"],      # «verdifall per 1 000 km» / «per 100 t»
+        "estimat": (a_ + b_ * egen) if egen else None,
+        "egen_km": egen,                         # beholdt for bil-malen og API-et
+        "egen": egen,
         "serie": sorted(par),
     }
 
 
-def km_botter(annonser: list[dict], steg: int = 10000) -> list[dict]:
+def km_botter(annonser: list[dict], steg: int | None = None, akse: dict = KM) -> list[dict]:
+    """Medianpris per intervall på aksen (10 000 km for bil, 500 t for traktor)."""
+    felt = akse["felt"]
+    steg = steg or akse["steg"]
     botter: dict[int, list[int]] = {}
-    for a in brukbare(annonser):
-        if a.get("pris") and a.get("km") is not None and er_utropspris(a):
-            nokkel = a["km"] // steg * steg
+    for a in brukbare(annonser, akse):
+        if a.get("pris") and a.get(felt) is not None and er_utropspris(a):
+            nokkel = a[felt] // steg * steg
             botter.setdefault(nokkel, []).append(a["pris"])
     return [{"fra": k, "til": k + steg, "antall": len(v), "median": statistics.median(v)}
             for k, v in sorted(botter.items())]
 
 
-def nabolag(annonser: list[dict], km: int, vindu: int = 10000) -> dict | None:
-    """De sammenlignbare annonsene rundt en gitt kilometerstand — tallet brukeren
-    faktisk forholder seg til, i motsetning til regresjonslinja."""
-    n = [a for a in brukbare(annonser) if a.get("km") is not None and a.get("pris")
-         and er_utropspris(a) and abs(a["km"] - km) <= vindu]
+def nabolag(annonser: list[dict], km: int, vindu: int | None = None, akse: dict = KM) -> dict | None:
+    """De sammenlignbare annonsene rundt en gitt kilometerstand (eller et timetall) — tallet
+    brukeren faktisk forholder seg til, i motsetning til regresjonslinja."""
+    felt = akse["felt"]
+    vindu = vindu or akse["vindu"]
+    n = [a for a in brukbare(annonser, akse) if a.get(felt) is not None and a.get("pris")
+         and er_utropspris(a) and abs(a[felt] - km) <= vindu]
     if not n:
         return None
     priser = sorted(a["pris"] for a in n)
@@ -138,7 +192,7 @@ def nabolag(annonser: list[dict], km: int, vindu: int = 10000) -> dict | None:
 
 def historikk(con, slug: str, dager: int | None = None) -> list[dict]:
     """Én rad per henting; hele historikken når `dager` er None (det er poenget med basen)."""
-    sql = ("SELECT dato, aktive, median, p25, p75, min, max, treff, indeks, ref_km, r2, nye, solgte "
+    sql = ("SELECT dato, aktive, median, p25, p75, min, max, treff, indeks, ref_km, ref_timer, r2, nye, solgte "
            "FROM kjøringer WHERE slug=?")
     args: tuple = (slug,)
     if dager:
@@ -179,20 +233,21 @@ def maanedsoversikt(con, slug: str) -> list[dict]:
     return ut
 
 
-def svg_kurve(annonser: list[dict], egen_km: int | None = None,
-              bredde: int = 720, hoyde: int = 380, m: int = 58) -> str:
-    """Pris mot kilometerstand som inline-SVG. Fargelegger kategori hvis satt."""
-    par = [(a["km"], a["pris"], a) for a in brukbare(annonser)
-           if a.get("km") and a.get("pris") and er_utropspris(a)]
+def svg_kurve(annonser: list[dict], egen: int | None = None,
+              bredde: int = 720, hoyde: int = 380, m: int = 58, akse: dict = KM) -> str:
+    """Pris mot kilometerstand (eller arbeidstimer) som inline-SVG."""
+    felt = akse["felt"]
+    par = [(a[felt], a["pris"], a) for a in brukbare(annonser, akse)
+           if a.get(felt) and a.get("pris") and er_utropspris(a)]
     if not par:
-        return "<p>Ingen annonser med både pris og kilometerstand.</p>"
+        return f"<p>Ingen annonser med både pris og {akse['navn'].lower()}.</p>"
     xs = [p[0] for p in par]
     ys = [p[1] for p in par]
-    x0, x1 = min(xs) - 5000, max(xs) + 5000
+    x0, x1 = min(xs) - akse["marg"], max(xs) + akse["marg"]
     y0, y1 = min(ys) - 20000, max(ys) + 20000
     sx = lambda x: m + (x - x0) / (x1 - x0) * (bredde - 2 * m)          # noqa: E731
     sy = lambda y: hoyde - m - (y - y0) / (y1 - y0) * (hoyde - 2 * m)   # noqa: E731
-    v = verdikurve(annonser, egen_km)
+    v = verdikurve(annonser, egen, akse)
     grid = ""
     for i in range(5):
         yv = y0 + (y1 - y0) * i / 4
@@ -203,7 +258,7 @@ def svg_kurve(annonser: list[dict], egen_km: int | None = None,
     for i in range(5):
         xv = x0 + (x1 - x0) * i / 4
         grid += (f'<text x="{sx(xv):.0f}" y="{hoyde-m+18}" text-anchor="middle" '
-                 f'fill="var(--dempet)" font-size="11">{xv/1000:.0f}k km</text>')
+                 f'fill="var(--dempet)" font-size="11">{_esc(akse_tekst(akse, xv))}</text>')
     linje = ""
     if v:
         linje = (f'<line x1="{sx(x0):.0f}" y1="{sy(v["a"]+v["b"]*x0):.0f}" x2="{sx(x1):.0f}" '
@@ -211,17 +266,18 @@ def svg_kurve(annonser: list[dict], egen_km: int | None = None,
                  f'stroke-dasharray="6 4"/>')
     punkter = "".join(
         f'<a href="{_esc(str(a.get("url") or ""), quote=True)}" target="_blank">'
-        f'<circle cx="{sx(a["km"]):.0f}" cy="{sy(a["pris"]):.0f}" r="5" fill="var(--aksent)" '
-        f'opacity=".75"><title>{_esc(_t(a))} — {kr(a["pris"])}, {km_str(a["km"])}</title>'
+        f'<circle cx="{sx(a[felt]):.0f}" cy="{sy(a["pris"]):.0f}" r="5" fill="var(--aksent)" '
+        f'opacity=".75"><title>{_esc(_t(a))} — {kr(a["pris"])}, {kr(a[felt])} {akse["enhet"]}</title>'
         f'</circle></a>' for _, _, a in par)
     return (f'<svg viewBox="0 0 {bredde} {hoyde}" style="width:100%;height:auto">{grid}{linje}{punkter}'
             f'<text x="{bredde/2}" y="{hoyde-6}" text-anchor="middle" fill="var(--dempet)" '
-            f'font-size="12">Kilometerstand</text>'
+            f'font-size="12">{_esc(akse["navn"])}</text>'
             f'<text x="12" y="18" fill="var(--dempet)" font-size="12">Utropspris</text></svg>')
 
 
-def svg_historikk(kjoringer: list[dict], bredde: int = 720, hoyde: int = 300, m: int = 58) -> str:
-    """Prisutvikling over hele historikken: indeks (pris ved REF_KM), median, kvartilbånd,
+def svg_historikk(kjoringer: list[dict], bredde: int = 720, hoyde: int = 300, m: int = 58,
+                  akse: dict = KM) -> str:
+    """Prisutvikling over hele historikken: indeks (pris ved aksens referanse), median, kvartilbånd,
     og antall til salgs som flate nederst. Tidsaksen er ekte datoer, ikke kjøringsnummer."""
     from datetime import date as _date
     pts = []
@@ -288,9 +344,10 @@ def svg_historikk(kjoringer: list[dict], bredde: int = 720, hoyde: int = 300, m:
                 f'{f" stroke-dasharray={chr(34)}{dash}{chr(34)}" if dash else ""}/>' + prikker)
     median = linje("median", "var(--dempet)", "1.5", "5 3")
     indeks = linje("indeks", "var(--aksent)", "2.5")
-    ref = next((k.get("ref_km") for _, k in reversed(pts) if k.get("ref_km")), None)
+    ref = next((k.get(akse["ref_felt"]) for _, k in reversed(pts) if k.get(akse["ref_felt"])), None)
+    ref_tekst = f" (pris ved {kr(ref)} {akse['enhet']})" if ref else ""
     tittel = (f'<text x="12" y="18" fill="var(--tekst)" font-size="12" font-weight="600">Prisutvikling</text>'
-              f'<text x="118" y="18" fill="var(--aksent)" font-size="11">— indeks{f" (pris ved {kr(ref)} km)" if ref else ""}</text>'
+              f'<text x="118" y="18" fill="var(--aksent)" font-size="11">— indeks{ref_tekst}</text>'
               f'<text x="{300 if ref else 190}" y="18" fill="var(--dempet)" font-size="11">- - median · bånd = 25–75 %</text>')
     return (f'<svg viewBox="0 0 {bredde} {hoyde}" style="width:100%;height:auto">{grid}{mnd}{band}{tilbud}'
             f'{median}{indeks}{tittel}</svg>')
@@ -358,22 +415,23 @@ def dager_mellom(fra: str | None, til: str | None) -> int | None:
 
 
 def kjoperliste(annonser: list[dict], kurve: dict | None, kriterier: dict | None,
-                i_dag: str | None = None) -> list[dict]:
+                i_dag: str | None = None, akse: dict = KM) -> list[dict]:
     """Kjøperens liste: annonser som oppfyller kriteriene, sortert etter hvor mye de ligger
     under regresjonslinja (negativt avvik = billigere enn forventet for kilometerstanden).
 
-    kriterier: {maks_pris, maks_km, aar_fra, aar_til, kategorier: [visningsnavn …]}.
+    kriterier: {maks_pris, maks_km | maks_timer, aar_fra, aar_til, kategorier: [visningsnavn …]}.
     Hver rad får avvik (kr), avvik_pct og ligget (dager siden utlagt / først sett)."""
     from datetime import date as _date
+    felt, krit = akse["felt"], akse["krit"]
     k = kriterier or {}
     i_dag = i_dag or _date.today().isoformat()
     ut = []
-    for a in brukbare(annonser):
+    for a in brukbare(annonser, akse):
         if not a.get("pris") or not er_utropspris(a) or a.get("solgt"):
             continue
         if k.get("maks_pris") and a["pris"] > k["maks_pris"]:
             continue
-        if k.get("maks_km") and (a.get("km") is None or a["km"] > k["maks_km"]):
+        if k.get(krit) and (a.get(felt) is None or a[felt] > k[krit]):
             continue
         if k.get("aar_fra") and (not a.get("aar") or a["aar"] < k["aar_fra"]):
             continue
@@ -383,8 +441,8 @@ def kjoperliste(annonser: list[dict], kurve: dict | None, kriterier: dict | None
         if k.get("kategorier") and not set(k["kategorier"]).issubset(tagger):
             continue
         r = dict(a)
-        if kurve and a.get("km") is not None:
-            forventet = kurve["a"] + kurve["b"] * a["km"]
+        if kurve and a.get(felt) is not None:
+            forventet = kurve["a"] + kurve["b"] * a[felt]
             r["forventet"] = round(forventet)
             r["avvik"] = round(a["pris"] - forventet)
             r["avvik_pct"] = round((a["pris"] - forventet) / forventet * 100, 1) if forventet else None

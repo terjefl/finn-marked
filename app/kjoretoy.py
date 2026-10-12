@@ -171,14 +171,17 @@ def modellaar_fra_vin(vin: str | None, reg_aar: int | None = None) -> int | None
 
 
 def finn_vertikal(kj: dict) -> str:
-    """Hvilken FINN-vertikal kjøretøyet hører hjemme i: bobil, campingvogn, MC eller bil.
-    Vegvesenets underkode sier «Campingbil»; tekniske koder L* er MC/moped, O* tilhenger."""
+    """Hvilken FINN-vertikal kjøretøyet hører hjemme i: bobil, campingvogn, MC, traktor eller bil.
+    Vegvesenets underkode sier «Campingbil»; tekniske koder L* er MC/moped, O* tilhenger,
+    T* traktor."""
     klasse = (kj.get("klasse") or "").lower()
     kode = (kj.get("klassekode") or "").upper()
     if "campingbil" in klasse or "bobil" in klasse:
         return "mobilehome"
     if kode.startswith("O") or "campingvogn" in klasse or "campingtilhenger" in klasse:
         return "caravan"
+    if kode.startswith("T") or "traktor" in klasse:
+        return "tractor"
     if kode.startswith("L"):
         return "mc"
     return "car"

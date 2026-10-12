@@ -77,6 +77,7 @@ def hoved() -> int:
     sjekk("vertikal: bobil", kjoretoy.finn_vertikal({"klasse": "Campingbil", "klassekode": "M1"}), "mobilehome")
     sjekk("vertikal: campingvogn", kjoretoy.finn_vertikal({"klasse": "Campingtilhenger", "klassekode": "O2"}), "caravan")
     sjekk("vertikal: MC", kjoretoy.finn_vertikal({"klasse": "Motorsykkel", "klassekode": "L3e"}), "mc")
+    sjekk("vertikal: traktor", kjoretoy.finn_vertikal({"klasse": "Traktor", "klassekode": "T1"}), "tractor")
     sjekk("typekode holdes ute av beskrivelsen",
           kjoretoy.beskrivelse({"merke": "VOLKSWAGEN", "modell": "CADDY", "typebetegnelse": "2KN", "aar": 2017}),
           "Volkswagen Caddy 2017")
