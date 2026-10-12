@@ -22,24 +22,34 @@ import urllib.request
 from email.message import EmailMessage
 
 from . import analyse, db
+from .kilder import finn as finn_kilde
 
 logg = logging.getLogger("finn-marked.varsling")
 
+#: Tekstene har «{ord}» der kjøretøytypen står (bil/traktor) — se typer_for()/forklaring_for().
 TYPER = {
     "kandidat": "Ny kandidat",
     "pris": "Prisendring",
-    "egen": "Min egen bil legges ut",
+    "egen": "Min egen {ord} legges ut",
     "solgt": "En annonse markeres solgt",
     "ny": "Hver ny annonse",
 }
 FORKLARING = {
     "kandidat": "En ny annonse i søket (eller en lagt ut på nytt) oppfyller kjøpskriteriene dine.",
     "pris": "Prisen endres på en annonse. Som kjøper: bare på kandidatene. Som eier: på alle i søket.",
-    "egen": "En annonse har samme registreringsnummer eller understellsnummer som din bil — altså din eksakte bil, "
+    "egen": "En annonse har samme registreringsnummer eller understellsnummer som din {ord} — altså din eksakte {ord}, "
             "f.eks. lagt ut av en forhandler etter at du solgte den.",
     "solgt": "En annonse i søket får FINNs «Solgt»-merke. Du får siste utropspris og hvor lenge den lå ute.",
     "ny": "Alle nye annonser i søket, uansett kriterier. Kan bli mange i store markeder.",
 }
+
+
+def typer_for(akse: dict = analyse.KM) -> dict:
+    return {k: t.format(ord=akse["ord"]) for k, t in TYPER.items()}
+
+
+def forklaring_for(akse: dict = analyse.KM) -> dict:
+    return {k: t.format(ord=akse["ord"]) for k, t in FORKLARING.items()}
 STANDARD = {"kjoper": ["kandidat", "pris"], "eier": ["egen", "solgt"]}
 
 
@@ -143,10 +153,11 @@ def plukk_hendelser(con, v: dict, fra_id: int) -> list[dict]:
     rader = db.ok(con, "SELECT * FROM hendelser WHERE slug=? AND id>? ORDER BY id", (v["slug"], fra_id))
     typer = set(valg["typer"])
     kandidat_ider: set[str] = set()
+    akse = analyse.AKSER[finn_kilde.vakt_akse(v)]
     if "kandidat" in typer:
         annonser = db.ok(con, "SELECT * FROM annonser WHERE slug=? AND aktiv=1 AND solgt=0", (v["slug"],))
-        kurve = analyse.verdikurve(annonser)
-        kandidat_ider = {a["kilde_id"] for a in analyse.kjoperliste(annonser, kurve, v.get("kriterier"))}
+        kurve = analyse.verdikurve(annonser, akse=akse)
+        kandidat_ider = {a["kilde_id"] for a in analyse.kjoperliste(annonser, kurve, v.get("kriterier"), akse=akse)}
     ut = []
     for h in rader:
         try:
@@ -167,7 +178,7 @@ def plukk_hendelser(con, v: dict, fra_id: int) -> list[dict]:
             h["merkelapp"] = "Prisendring"
             ut.append(h)
         elif t == "egen" and "egen" in typer:
-            h["merkelapp"] = "Din bil"
+            h["merkelapp"] = f"Din {akse['ord']}"
             ut.append(h)
         elif t == "solgt" and "solgt" in typer:
             h["merkelapp"] = "Solgt"

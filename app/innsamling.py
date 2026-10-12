@@ -13,6 +13,7 @@ import time
 from datetime import date
 
 from . import analyse, db, kilder
+from .kilder import finn as finn_kilde
 
 #: Vakter som hentes nå. Delt mellom web-ruta («Oppdater nå») og scheduleren, som
 #: ellers kunne hente samme vakt samtidig og skrive over hverandres annonser.
@@ -45,6 +46,8 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
     """Henter alle søk for vakten, oppdaterer basen og returnerer en oppsummering."""
     start = time.monotonic()
     slug = v["slug"]
+    akse = analyse.AKSER[finn_kilde.vakt_akse(v)]     # km (bil …) eller timer (traktor)
+    felt = akse["felt"]
     alle: dict[tuple[str, str], dict] = {}
     treff: dict[str, int] = {}
     advarsler: list[str] = []
@@ -93,14 +96,15 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
                 ekstra["forrige_kilde_id"] = forrige["kilde_id"]
                 a["ekstra"] = ekstra
             con.execute(
-                """INSERT INTO annonser (slug, kilde, kilde_id, tittel, undertittel, aar, km, drivstoff,
+                """INSERT INTO annonser (slug, kilde, kilde_id, tittel, undertittel, aar, km, timer, drivstoff,
                        rekkevidde, pris, pris_type, sted, selger, selger_type, url, tagger, sok_tagger,
                        ekstra, forst_sett, sist_sett, borte_dato, aktiv, merke, solgt, solgt_dato,
                        regnr, vin, lagt_ut)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?)""",
-                (slug, kilde, kilde_id, a["tittel"], a["undertittel"], a["aar"], a["km"], a["drivstoff"],
-                 a["rekkevidde"], a["pris"], a["pris_type"], a["sted"], a["selger"], a["selger_type"],
-                 a["url"], a["tagger"], json.dumps(a.get("sok_tagger_liste") or [], ensure_ascii=False),
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?)""",
+                (slug, kilde, kilde_id, a["tittel"], a["undertittel"], a["aar"], a["km"], a.get("timer"),
+                 a["drivstoff"], a["rekkevidde"], a["pris"], a["pris_type"], a["sted"], a["selger"],
+                 a["selger_type"], a["url"], a["tagger"],
+                 json.dumps(a.get("sok_tagger_liste") or [], ensure_ascii=False),
                  json.dumps(a.get("ekstra") or {}, ensure_ascii=False), i_dag, i_dag,
                  1 if not a["solgt"] else 0, a["merke"], 1 if a["solgt"] else 0,
                  i_dag if a["solgt"] else None, regnr, vin, lagt_ut))
@@ -108,8 +112,8 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
                 con.execute("""INSERT INTO pris_historikk (slug, kilde, kilde_id, dato, pris, pris_type)
                                VALUES (?,?,?,?,?,?)""",
                             (slug, kilde, kilde_id, i_dag, a["pris"], a["pris_type"]))
-            detaljer = {"pris": a["pris"], "km": a["km"], "sted": a["sted"], "url": a["url"],
-                        "kilde": kilde, "kilde_id": kilde_id, "pris_type": a["pris_type"]}
+            detaljer = {"pris": a["pris"], "km": a["km"], "timer": a.get("timer"), "sted": a["sted"],
+                        "url": a["url"], "kilde": kilde, "kilde_id": kilde_id, "pris_type": a["pris_type"]}
             if forrige and not a["solgt"]:
                 detaljer["forrige"] = {"kilde_id": forrige["kilde_id"], "pris": forrige["pris"],
                                        "sist_sett": forrige["sist_sett"], "solgt": forrige["solgt"]}
@@ -123,16 +127,17 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
                             f"{'Solgt: ' if a['solgt'] else 'Ny annonse: '}{_tittel(a)}".strip(), detaljer)
             if egen and _er_egen(egen, regnr, vin):
                 db.hendelse(con, slug, "egen", a["url"],
-                            f"Din bil ligger ute: {_tittel(a)} {_pris(a['pris'], a['pris_type'])}",
-                            {"pris": a["pris"], "km": a["km"], "url": a["url"], "kilde": kilde,
-                             "kilde_id": kilde_id, "regnr": regnr})
+                            f"Din {akse['ord']} ligger ute: {_tittel(a)} {_pris(a['pris'], a['pris_type'])}",
+                            {"pris": a["pris"], "km": a["km"], "timer": a.get("timer"), "url": a["url"],
+                             "kilde": kilde, "kilde_id": kilde_id, "regnr": regnr})
         else:
             if not rad["solgt"] and a["solgt"]:
                 solgte += 1
                 db.hendelse(con, slug, "solgt", a["url"],
-                            f"Solgt: {_tittel(a)} ({rad['km'] or a['km']} km, "
+                            f"Solgt: {_tittel(a)} ({rad[felt] or a.get(felt)} {akse['enhet']}, "
                             f"sist {_pris(rad['pris'], rad['pris_type'])})",
-                            {"pris": rad["pris"], "km": rad["km"], "url": a["url"], "kilde": kilde})
+                            {"pris": rad["pris"], "km": rad["km"], "timer": rad["timer"], "url": a["url"],
+                             "kilde": kilde})
             elif rad["pris"] != a["pris"] and a["pris"] and not a["solgt"]:
                 prisendret += 1
                 db.hendelse(con, slug, "pris", a["url"],
@@ -144,13 +149,13 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
                                VALUES (?,?,?,?,?,?)""",
                             (slug, kilde, kilde_id, i_dag, a["pris"], a["pris_type"]))
             con.execute(
-                """UPDATE annonser SET tittel=?, undertittel=?, aar=?, km=?, drivstoff=?, rekkevidde=?,
+                """UPDATE annonser SET tittel=?, undertittel=?, aar=?, km=?, timer=?, drivstoff=?, rekkevidde=?,
                        pris=COALESCE(?, pris), pris_type=?, sted=?, selger=?, selger_type=?, tagger=?,
                        ekstra=?, sist_sett=?, aktiv=?, borte_dato=NULL, merke=?, solgt=?,
                        solgt_dato=COALESCE(?, solgt_dato),
                        regnr=COALESCE(?, regnr), vin=COALESCE(?, vin), lagt_ut=COALESCE(?, lagt_ut)
                    WHERE slug=? AND kilde=? AND kilde_id=?""",
-                (a["tittel"], a["undertittel"], a["aar"], a["km"], a["drivstoff"], a["rekkevidde"],
+                (a["tittel"], a["undertittel"], a["aar"], a["km"], a.get("timer"), a["drivstoff"], a["rekkevidde"],
                  a["pris"], a["pris_type"], a["sted"], a["selger"], a["selger_type"], a["tagger"],
                  json.dumps(_behold_ekstra(rad, a), ensure_ascii=False), i_dag,
                  0 if a["solgt"] else 1, a["merke"], 1 if a["solgt"] else rad["solgt"] or 0,
@@ -164,10 +169,11 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
                         (i_dag, slug, rad["kilde"], rad["kilde_id"]))
             db.hendelse(con, slug, "borte", rad["url"],
                         f"Forsvant fra søket: {rad['tittel']} {rad['undertittel'] or ''} "
-                        f"({rad['km']} km, {_pris(rad['pris'], rad['pris_type'])})",
-                        {"pris": rad["pris"], "km": rad["km"], "url": rad["url"], "kilde": rad["kilde"]})
+                        f"({rad[felt]} {akse['enhet']}, {_pris(rad['pris'], rad['pris_type'])})",
+                        {"pris": rad["pris"], "km": rad["km"], "timer": rad["timer"], "url": rad["url"],
+                         "kilde": rad["kilde"]})
 
-    ute = analyse.urimelige([dict(a, kilde_id=k[1]) for k, a in alle.items()])
+    ute = analyse.urimelige([dict(a, kilde_id=k[1]) for k, a in alle.items()], akse)
     priser = sorted(a["pris"] for (_, kid), a in alle.items() if a["pris"] and not a["solgt"] and kid not in ute)
 
     def pct(p: float):
@@ -177,18 +183,21 @@ def hent_vakt(con, v: dict, logg=lambda m: None) -> dict:
 
     varighet = round(time.monotonic() - start, 1)
     treff_totalt = sum(treff.values()) if len(treff) > 1 else (max(treff.values()) if treff else 0)
-    # Prisindeks: hva markedet ber for en bil med REF_KM på telleren, uavhengig av hvilke
-    # biler som tilfeldigvis ligger ute. Medianen faller av seg selv når bilene eldes.
-    kurve = analyse.verdikurve([dict(a, kilde_id=k[1]) for k, a in alle.items() if not a["solgt"]], analyse.REF_KM)
+    # Prisindeks: hva markedet ber for et kjøretøy med aksens referanse på telleren (60 000 km
+    # for bil, 3 000 t for traktor), uavhengig av hvilke som tilfeldigvis ligger ute. Medianen
+    # faller av seg selv når bilene eldes. Referansen skrives i ref_km eller ref_timer etter akse.
+    kurve = analyse.verdikurve([dict(a, kilde_id=k[1]) for k, a in alle.items() if not a["solgt"]],
+                               akse["ref"], akse)
     indeks = int(round(kurve["estimat"])) if kurve and kurve.get("estimat") else None
+    ref = akse["ref"] if indeks else None
     con.execute("""INSERT INTO kjøringer (slug, dato, annonser_hentet, treff, aktive, median, p25, p75,
-                                          min, max, varighet, indeks, ref_km, r2, nye, solgte)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                                          min, max, varighet, indeks, ref_km, ref_timer, r2, nye, solgte)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (slug, db.naa(), len(alle), treff_totalt, len(priser),
                  statistics.median(priser) if priser else None, pct(25), pct(75),
                  priser[0] if priser else None, priser[-1] if priser else None, varighet,
-                 indeks, analyse.REF_KM if indeks else None, round(kurve["r2"], 3) if kurve else None,
-                 nye, solgte))
+                 indeks, ref if felt == "km" else None, ref if felt == "timer" else None,
+                 round(kurve["r2"], 3) if kurve else None, nye, solgte))
     kilder_txt = ", ".join(f"{k}: {n}" for k, n in sorted(treff.items()))
     status = (f"OK: {len(alle)} annonser lest ({kilder_txt}), {len(priser)} til salgs med pris, "
               f"{nye} nye{f' ({igjen} lagt ut på nytt)' if igjen else ''}, {prisendret} prisendringer, "
@@ -261,7 +270,6 @@ def _pris(pris, pris_type) -> str:
 
 def kilder_finn_kategoriser(a: dict, v: dict, sok_tagger: list[str]) -> str:
     """Kategorisering er kildespesifikk (fritekst-mønstre), men felles for vakten."""
-    from .kilder import finn as finn_kilde
     a["sok_tagger_liste"] = sok_tagger
     return finn_kilde.kategoriser(a, v.get("kategorier") or {}, sok_tagger)
 
@@ -272,7 +280,6 @@ def berik_detaljer(con, v: dict, maks_alder_dager: int = 7, grense: int = 40,
 
     Bare FINN-annonser støttes foreløpig — andre kilder hoppes over.
     """
-    from .kilder import finn as finn_kilde
     rader = db.ok(con, """SELECT a.kilde, a.kilde_id, a.url FROM annonser a
                           WHERE a.slug=? AND a.kilde='finn' AND a.aktiv=1 AND NOT a.solgt
                             AND NOT EXISTS (SELECT 1 FROM detaljer d

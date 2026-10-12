@@ -91,6 +91,13 @@ MIGRERINGER: list[tuple[int, list[str]]] = [
     (9, [
         "ALTER TABLE brukere ADD COLUMN tema TEXT NOT NULL DEFAULT 'auto'",
     ]),
+    # Traktor: FINN oppgir arbeidstimer, ikke kilometer. Egne kolonner, så km forblir km
+    # (NULL for traktor). Indeksen for en traktor-vakt regnes ved ref_timer, ref_km er NULL.
+    (10, [
+        "ALTER TABLE annonser ADD COLUMN timer INTEGER",
+        "ALTER TABLE vakter ADD COLUMN egen_timer INTEGER",
+        "ALTER TABLE kjøringer ADD COLUMN ref_timer INTEGER",
+    ]),
 ]
 
 SKJEMA = """
@@ -283,15 +290,15 @@ def vakt(con: sqlite3.Connection, slug: str) -> dict | None:
 
 def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
     con.execute(
-        """INSERT INTO vakter (slug, navn, sok, kategorier, egen_bil, egen_km, hentetime, aktiv,
+        """INSERT INTO vakter (slug, navn, sok, kategorier, egen_bil, egen_km, egen_timer, hentetime, aktiv,
                                opprettet, sist_hentet, sist_status, eier, regnr, kjoretoy, formaal, kriterier,
                                varsling)
-           VALUES (:slug, :navn, :sok, :kategorier, :egen_bil, :egen_km, :hentetime, :aktiv,
+           VALUES (:slug, :navn, :sok, :kategorier, :egen_bil, :egen_km, :egen_timer, :hentetime, :aktiv,
                    COALESCE(:opprettet, :naa), :sist_hentet, :sist_status, :eier, :regnr, :kjoretoy,
                    :formaal, :kriterier, :varsling)
            ON CONFLICT(slug) DO UPDATE SET
              navn=excluded.navn, sok=excluded.sok, kategorier=excluded.kategorier,
-             egen_bil=excluded.egen_bil, egen_km=excluded.egen_km,
+             egen_bil=excluded.egen_bil, egen_km=excluded.egen_km, egen_timer=excluded.egen_timer,
              hentetime=excluded.hentetime, aktiv=excluded.aktiv,
              eier=COALESCE(excluded.eier, vakter.eier),
              regnr=excluded.regnr, kjoretoy=excluded.kjoretoy,
@@ -300,13 +307,14 @@ def lagre_vakt(con: sqlite3.Connection, v: dict) -> None:
             "slug": v["slug"], "navn": v["navn"],
             "sok": json.dumps(v.get("sok") or [], ensure_ascii=False),
             "kategorier": json.dumps(v.get("kategorier") or {}, ensure_ascii=False),
-            "egen_bil": v.get("egen_bil"), "egen_km": v.get("egen_km"),
+            "egen_bil": v.get("egen_bil"), "egen_km": v.get("egen_km"), "egen_timer": v.get("egen_timer"),
             "hentetime": int(v.get("hentetime") or 7), "aktiv": int(v.get("aktiv", 1)),
             "opprettet": v.get("opprettet"), "sist_hentet": v.get("sist_hentet"),
             "sist_status": v.get("sist_status"), "naa": naa(), "eier": v.get("eier"),
             "regnr": v.get("regnr") or None,
             "kjoretoy": json.dumps(v["kjoretoy"], ensure_ascii=False) if v.get("kjoretoy") else None,
-            "formaal": v.get("formaal") or ("eier" if (v.get("regnr") or v.get("egen_km")) else "kjoper"),
+            "formaal": v.get("formaal") or ("eier" if (v.get("regnr") or v.get("egen_km") or v.get("egen_timer"))
+                                            else "kjoper"),
             "kriterier": json.dumps(v["kriterier"], ensure_ascii=False) if v.get("kriterier") else None,
             "varsling": json.dumps(v["varsling"], ensure_ascii=False) if v.get("varsling") else None,
         },

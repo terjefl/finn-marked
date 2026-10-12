@@ -82,10 +82,9 @@ def sjekk_url(url: str) -> str | None:
         if "/mobility/search" not in deler.path:
             return ("FINN-adressen ser ikke ut som et søk (forventer /mobility/search/…). "
                     "Gjør søket på finn.no og kopier adressen fra adressefeltet.")
-        if deler.path.rstrip("/").endswith(("/caravan", "/mobilehome", "/mc")) or deler.path.rstrip("/").endswith("/car"):
+        if deler.path.rstrip("/").endswith(("/car", "/caravan", "/mobilehome", "/mc", "/agriculturetractor")):
             return None
-        return "Bare bil, bobil, campingvogn og MC støttes hos FINN."
-        return None
+        return "Bare bil, bobil, campingvogn, MC og traktor støttes hos FINN."
     if "auksjonen.no" in vert:
         return None
     return f"Ukjent kilde «{deler.netloc}» — bare finn.no og auksjonen.no støttes."

@@ -24,7 +24,7 @@
         {% if kj.farge %} · {{ kj.farge | lower }}{% endif %}
       </div>
     </div>
-    <a href="/vakt/ny?regnr={{ kj.regnr | urlencode }}" class="knapp-lenke"><button type="button">Følg denne bilen →</button></a>
+    <a href="/vakt/ny?{{ 'type=traktor&' if vertikal == 'tractor' }}regnr={{ kj.regnr | urlencode }}" class="knapp-lenke"><button type="button">Følg denne {{ 'traktoren' if vertikal == 'tractor' else 'bilen' }} →</button></a>
   </div>
 </div>
 

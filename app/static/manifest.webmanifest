@@ -1,7 +1,7 @@
 {
   "name": "FINN-marked",
   "short_name": "FINN-marked",
-  "description": "Bruktbilmarkedet over tid: priser, salg og verdikurve.",
+  "description": "Bruktbil- og traktormarkedet over tid: priser, salg og verdikurve.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f3f5f8",

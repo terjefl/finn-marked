@@ -3,6 +3,7 @@
 Sider:  /                          – egne vakter (admin: alle) med nøkkeltall
         /vakt/<slug>               – dashbord for ett marked
         /vakt/ny, /vakt/<slug>/rediger – skjema for søk (flere vakter samtidig)
+        /vakt/ny?type=traktor      – samme flyt for traktor (arbeidstimer i stedet for km)
         /logginn, /oppsett, /invitasjon/<token>, /konto, /admin/brukere – brukere og passkeys
 API:    /api/vakter, /api/vakt/<slug>, /api/vakt/<slug>/annonser.json (krever sesjon)
         /api/auth/*                – passkey-seremoniene (se app/auth.py og static/passkey.js)
@@ -30,6 +31,7 @@ from fastapi.templating import Jinja2Templates
 
 from . import analyse, auth, db, innsamling, kjoretoy, varsling
 from . import sok as sokmod
+from .kilder import finn as finn_kilde
 from .sok import parse_kategorier, parse_sok
 
 BASE = Path(__file__).parent
@@ -68,6 +70,7 @@ templates.env.globals["statisk_versjon"] = str(max(
     int(p.stat().st_mtime) for p in (BASE / "static").rglob("*") if p.is_file()))[-6:]
 templates.env.filters["kr"] = analyse.kr
 templates.env.filters["km"] = analyse.km_str
+templates.env.filters["timer"] = analyse.timer_str
 templates.env.filters["dager"] = analyse.dager_mellom
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
 
@@ -107,6 +110,12 @@ def admin(b: dict = Depends(bruker)) -> dict:
     if not auth.er_admin(b):
         raise HTTPException(404)
     return b
+
+
+def _akse(v: dict | None) -> dict:
+    """Aksen vakten måler slitasje i: km for bil (og bobil, campingvogn, MC), timer for traktor.
+    Følger vaktens FINN-søk; en vakt uten søk regnes som bil."""
+    return analyse.AKSER[finn_kilde.vakt_akse(v or {})]
 
 
 def _min_vakt(con, slug: str, b: dict) -> dict:
@@ -167,25 +176,32 @@ def _hent_jobb(slug: str, detaljer: bool = False) -> None:
 
 def _vakt_kontekst(con, slug: str, b: dict) -> dict:
     v = _min_vakt(con, slug, b)
-    annonser = db.ok(con, "SELECT * FROM annonser WHERE slug=? AND aktiv=1 AND solgt=0 ORDER BY km", (slug,))
+    akse = _akse(v)
+    egen = v.get(akse["egen_felt"])                   # eierens egne km eller timer
+    # Kolonnenavnet kommer fra analyse.AKSER («km»/«timer»), aldri fra forespørselen.
+    annonser = db.ok(con, f"SELECT * FROM annonser WHERE slug=? AND aktiv=1 AND solgt=0 ORDER BY {akse['felt']}",
+                     (slug,))
     solgte = db.ok(con, "SELECT * FROM annonser WHERE slug=? AND solgt=1 ORDER BY solgt_dato DESC", (slug,))
     return {
         "v": v,
+        "akse": akse,
+        "egen": egen,
         "annonser": annonser,
         "solgte": solgte,
-        "oppsummering": analyse.oppsummer(annonser),
-        "kurve": analyse.verdikurve(annonser, v.get("egen_km")),
-        "botter": analyse.km_botter(annonser),
-        "nabolag": analyse.nabolag(annonser, v["egen_km"]) if v.get("egen_km") else None,
+        "oppsummering": analyse.oppsummer(annonser, akse),
+        "kurve": analyse.verdikurve(annonser, egen, akse),
+        "botter": analyse.km_botter(annonser, akse=akse),
+        "nabolag": analyse.nabolag(annonser, egen, akse=akse) if egen else None,
         "kjoringer": analyse.historikk(con, slug),
         "maaneder": analyse.maanedsoversikt(con, slug),
         "hendelser": db.ok(con, "SELECT * FROM hendelser WHERE slug=? ORDER BY id DESC LIMIT 60", (slug,)),
         "liggetid": analyse.liggetid(solgte),
-        "kjoperliste": analyse.kjoperliste(annonser, analyse.verdikurve(annonser), v.get("kriterier"))
+        "kjoperliste": analyse.kjoperliste(annonser, analyse.verdikurve(annonser, akse=akse), v.get("kriterier"),
+                                           akse=akse)
         if (v.get("formaal") or "eier") == "kjoper" else [],
         "indeks_trend": analyse.indeks_trend(analyse.historikk(con, slug)),
         "egen_ute": _egen_ute(con, v, annonser + solgte),
-        "urimelige": analyse.urimelige(annonser),
+        "urimelige": analyse.urimelige(annonser, akse),
         "igjen": {r["kilde_id"] for r in con.execute(
             "SELECT kilde_id FROM annonser WHERE slug=? AND ekstra LIKE '%forrige_kilde_id%'", (slug,))},
     }
@@ -214,7 +230,8 @@ def helse(con: sqlite3.Connection = Depends(kon)):
 @app.get("/", response_class=HTMLResponse)
 def forside(request: Request, alle: str = "", formaal: str = "", con: sqlite3.Connection = Depends(kon),
             b: dict = Depends(bruker)):
-    """Egne biler som standard. Admin kan vise alle brukeres med ?alle=1, gruppert per eier."""
+    """Egne biler (og traktorer) som standard. Admin kan vise alle brukeres med ?alle=1,
+    gruppert per eier. Bil står før traktor innenfor hver gruppe."""
     oversikt = []
     vis_alle = auth.er_admin(b) and alle == "1"
     eiere = {u["id"]: u["navn"] for u in auth.brukere(con)} if auth.er_admin(b) else {}
@@ -226,17 +243,26 @@ def forside(request: Request, alle: str = "", formaal: str = "", con: sqlite3.Co
     if formaal in ("eier", "kjoper"):
         vakter = [v for v in vakter if (v.get("formaal") or "eier") == formaal]
     for v in vakter:
+        akse = _akse(v)
         annonser = db.ok(con, "SELECT * FROM annonser WHERE slug=? AND aktiv=1 AND solgt=0", (v["slug"],))
         solgte = con.execute("SELECT COUNT(*) c FROM annonser WHERE slug=? AND solgt=1",
                              (v["slug"],)).fetchone()["c"]
         nye = con.execute("SELECT COUNT(*) c FROM hendelser WHERE slug=? AND type='ny' "
                           "AND tid >= datetime('now','localtime','-7 days')",
                           (v["slug"],)).fetchone()["c"]
-        oversikt.append({"v": v, "oppsummering": analyse.oppsummer(annonser),
+        oversikt.append({"v": v, "akse": akse, "egen_verdi": v.get(akse["egen_felt"]),
+                         "oppsummering": analyse.oppsummer(annonser, akse),
                          "solgte": solgte, "nye_uke": nye, "status": _kjorer.get(v["slug"]),
                          "eier": eiere.get(v.get("eier")), "egen": v.get("eier") == b["id"]})
+    # Bil før traktor innenfor hver eier-gruppe; ellers som før (stabil sortering).
+    rekkefolge: dict = {}
+    for o in oversikt:
+        rekkefolge.setdefault(o["v"].get("eier"), len(rekkefolge))
+    oversikt.sort(key=lambda o: (rekkefolge[o["v"].get("eier")], o["akse"]["felt"] != "km"))
+    traktorer = sum(1 for o in oversikt if o["akse"]["felt"] == "timer")
     return templates.TemplateResponse(request, "forside.html",
                                       {"oversikt": oversikt, "vis_alle": vis_alle, "andre": andre,
+                                       "traktorer": traktorer, "biler": len(oversikt) - traktorer,
                                        "formaal": formaal if formaal in ("eier", "kjoper") else ""})
 
 
@@ -270,17 +296,20 @@ def _brukervalg(con, b: dict) -> list[dict]:
 
 @app.get("/vakt/ny", response_class=HTMLResponse)
 def ny_vakt(request: Request, url: str | None = None, navn: str = "", slug: str = "", eier: str = "",
-            regnr: str = "", con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
+            regnr: str = "", type: str = "", con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     """Steg 1 (uten url): lim inn én søke-URL, få forhåndsvisning og navneforslag.
-    Steg 2 (med url): fullt skjema, forhåndsutfylt med søket og forslagene fra steg 1."""
+    Steg 2 (med url): fullt skjema, forhåndsutfylt med søket og forslagene fra steg 1.
+    `type=traktor` gir traktor-inngangen («Følg traktor»); i steg 2 følger aksen URL-en."""
     valgt_eier = int(eier) if (auth.er_admin(b) and eier.isdigit()) else b["id"]
     if not url:
+        akse = analyse.AKSER["timer" if type == "traktor" else "km"]
         return templates.TemplateResponse(request, "ny.html",
                                           {"brukere": _brukervalg(con, b), "valgt_eier": valgt_eier,
-                                           "regnr": regnr.strip().upper()})
+                                           "regnr": regnr.strip().upper(), "akse": akse,
+                                           "vertikal": finn_kilde.VERTIKALER["tractor" if type == "traktor" else "car"]})
     url = sokmod.rens_url(url)
     kilde = sokmod.kilde_fra_url(url)
-    k = _skjema_kontekst(None)
+    k = _skjema_kontekst(None, _akse({"sok": [{"url": url}]}))
     k["skjema"].update({"navn": navn, "slug": slug or sokmod.slugify(navn), "eier": valgt_eier,
                         "sok": [{"tag": "alle" if kilde == "finn" else kilde, "url": url, "kilde": kilde, "auto": True}]})
     k["skjema"]["formaal"] = "eier" if regnr.strip() else "kjoper"
@@ -309,7 +338,8 @@ def oppslag(request: Request, regnr: str = "", b: dict = Depends(bruker)):
         except kjoretoy.Oppslagsfeil as e:
             feil = str(e)
     return templates.TemplateResponse(request, "oppslag.html",
-                                      {"regnr": regnr.strip().upper(), "kj": kj, "feil": feil})
+                                      {"regnr": regnr.strip().upper(), "kj": kj, "feil": feil,
+                                       "vertikal": kjoretoy.finn_vertikal(kj) if kj else "car"})
 
 
 @app.get("/api/kjoretoy")
@@ -380,8 +410,11 @@ def api_forhandsvis(url: str, b: dict = Depends(bruker)):
         return {"advarsel": f"Siden oppgir {f['treff']} treff, men ingen annonser ble gjenkjent — "
                             "FINN kan ha endret siden. Si fra."}
     navn, slug = sokmod.navneforslag(url, f["titler"])
+    akse = _akse({"sok": [{"url": url}]})
     return {"advarsel": None, "kilde": kilde, "treff": f["treff"], "sider": f["sider"],
-            "eksempler": f["eksempler"], "navn": navn, "slug": slug}
+            "eksempler": f["eksempler"], "navn": navn, "slug": slug,
+            "vertikal": finn_kilde.vertikal_av_url(url) if kilde == "finn" else None,
+            "akse": {"felt": akse["felt"], "kort": akse["kort"], "enhet": akse["enhet"], "ord": akse["ord"]}}
 
 
 # ⚠️ Rekkefølge: /vakt/ny MÅ stå før /vakt/{slug}, ellers fanger {slug} ordet «ny».
@@ -403,14 +436,17 @@ def vakt_side(request: Request, slug: str, kategori: str | None = None, q: str |
         alle_kategorier = sorted({x for a in k["annonser"] for x in (a["tagger"] or "").split(",") if x})
     else:
         alle_kategorier = sorted({x for a in annonser for x in (a["tagger"] or "").split(",") if x})
-    return templates.TemplateResponse(request, "vakt.html", {
+    akse = k["akse"]
+    # Traktor har egen mal (arver bil-malen og bytter ut seksjonene som snakker om km).
+    mal = "vakt_traktor.html" if akse["felt"] == "timer" else "vakt.html"
+    return templates.TemplateResponse(request, mal, {
         **k,
         "annonser": annonser,
-        "filtrert_oppsummering": analyse.oppsummer(annonser),
-        "kurve": analyse.verdikurve(annonser, k["v"].get("egen_km")),
-        "botter": analyse.km_botter(annonser),
-        "svg": analyse.svg_kurve(annonser, k["v"].get("egen_km")),
-        "historikk_svg": analyse.svg_historikk(k["kjoringer"]),
+        "filtrert_oppsummering": analyse.oppsummer(annonser, akse),
+        "kurve": analyse.verdikurve(annonser, k["egen"], akse),
+        "botter": analyse.km_botter(annonser, akse=akse),
+        "svg": analyse.svg_kurve(annonser, k["egen"], akse=akse),
+        "historikk_svg": analyse.svg_historikk(k["kjoringer"], akse=akse),
         "kategori": valgt,
         "kategorier": alle_kategorier,
         "aar": aar if (aar and aar.isdigit()) else "",
@@ -435,22 +471,25 @@ def hent(slug: str, detaljer: str | None = Form(None), con: sqlite3.Connection =
     return RedirectResponse(f"/vakt/{slug}", status_code=303)
 
 
-def _skjema_kontekst(v: dict | None) -> dict:
-    """Feltene rediger.html viser. `skjema` er flat, så ny/rediger/kopi deler mal."""
+def _skjema_kontekst(v: dict | None, akse: dict | None = None) -> dict:
+    """Feltene rediger.html viser. `skjema` er flat, så ny/rediger/kopi deler mal.
+    `akse` styrer etikettene (bil/km eller traktor/timer); for en lagret vakt følger den søkene."""
+    akse = akse or _akse(v)
+    felles = {"kopi": None, "forslag": [], "brukere": [], "akse": akse, "ord": akse["ord"],
+              "varsel_typer": varsling.typer_for(akse), "varsel_forklaring": varsling.forklaring_for(akse)}
     if not v:
-        return {"v": None, "kopi": None, "forslag": [], "brukere": [], "varsel_typer": varsling.TYPER,
-            "varsel_forklaring": varsling.FORKLARING,
+        return {**felles, "v": None,
                 "skjema": {"navn": "", "slug": "", "eier": None, "sok": [], "kategorier": {},
-                           "egen_bil": "", "egen_km": "", "regnr": "", "kjoretoy": None,
+                           "egen_bil": "", "egen_km": "", "egen_timer": "", "regnr": "", "kjoretoy": None,
                            "hentetime": 7, "aktiv": True, "formaal": "", "kriterier": {},
                            "varsling": {"aktiv": False, "typer": [], "kanaler": {"epost": True, "pushover": True}}}}
     sok = [{"tag": s.get("tag") or "", "url": s["url"], "kilde": s.get("kilde") or "finn",
             "auto": (s.get("kilde") or "finn") == sokmod.kilde_fra_url(s["url"])} for s in v["sok"]]
-    return {"v": v, "kopi": None, "forslag": [], "brukere": [], "varsel_typer": varsling.TYPER,
-            "varsel_forklaring": varsling.FORKLARING,
+    return {**felles, "v": v,
             "skjema": {"navn": v["navn"], "slug": v["slug"], "eier": v.get("eier"), "sok": sok,
                        "kategorier": v.get("kategorier") or {}, "egen_bil": v.get("egen_bil") or "",
-                       "egen_km": v.get("egen_km") or "", "regnr": v.get("regnr") or "",
+                       "egen_km": v.get("egen_km") or "", "egen_timer": v.get("egen_timer") or "",
+                       "regnr": v.get("regnr") or "",
                        "kjoretoy": v.get("kjoretoy"), "hentetime": v.get("hentetime") or 7,
                        "aktiv": bool(v.get("aktiv")), "formaal": v.get("formaal") or "",
                        "kriterier": v.get("kriterier") or {}, "varsling": varsling.varsling_for(v)}}
@@ -486,7 +525,7 @@ def kopier(request: Request, slug: str, til: str = "", con: sqlite3.Connection =
     k["skjema"].update({
         "navn": f"{v['navn']} ({mottaker['navn']})" if mottaker else f"{v['navn']} (kopi)",
         "slug": f"{v['slug']}-{sokmod.slugify(mottaker['navn'])}" if mottaker else f"{v['slug']}-kopi",
-        "eier": mottaker["id"] if mottaker else a["id"], "egen_bil": "", "egen_km": "",
+        "eier": mottaker["id"] if mottaker else a["id"], "egen_bil": "", "egen_km": "", "egen_timer": "",
         "regnr": "", "kjoretoy": None,
     })
     return templates.TemplateResponse(request, "rediger.html", k)
@@ -497,11 +536,11 @@ def kopier(request: Request, slug: str, til: str = "", con: sqlite3.Connection =
 @app.post("/vakt/lagre")
 def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
           kategorier: str = Form(""), egen_bil: str = Form(""), egen_km: str = Form(""),
-          hentetime: int = Form(7), aktiv: str | None = Form(None), eier: str = Form(""),
+          egen_timer: str = Form(""), hentetime: int = Form(7), aktiv: str | None = Form(None), eier: str = Form(""),
           sok_tag: list[str] = Form([]), sok_url: list[str] = Form([]), sok_kilde: list[str] = Form([]),
           kat_navn: list[str] = Form([]), kat_nokkel: list[str] = Form([]), regnr: str = Form(""),
           formaal: str = Form(""), krit_maks_pris: str = Form(""), krit_maks_km: str = Form(""),
-          krit_aar_fra: str = Form(""), krit_aar_til: str = Form(""), krit_kat: list[str] = Form([]),
+          krit_maks_timer: str = Form(""), krit_aar_fra: str = Form(""), krit_aar_til: str = Form(""), krit_kat: list[str] = Form([]),
           varsle: str | None = Form(None), varsel_typer: list[str] = Form([]), varsel_kanaler: list[str] = Form(None),
           con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     """Skjemaet sender søk og kategorier som rader (sok_*/kat_*). De gamle tekstfeltene
@@ -510,6 +549,11 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
     if not ren:
         raise HTTPException(400, "slug mangler")
     nye_sok = sokmod.bygg_sok(sok_tag, sok_url, sok_kilde) if sok_url else parse_sok(sok)
+    # Én akse per vakt: bil- og traktor-søk kan ikke blandes (analysen regner mot én måleenhet).
+    akser = {finn_kilde.VERTIKALER[finn_kilde.vertikal_av_url(s["url"])]["akse"]
+             for s in nye_sok if "finn.no" in (s.get("url") or "")}
+    if len(akser) > 1:
+        raise HTTPException(400, "Bil- og traktor-søk kan ikke blandes i samme vakt — lag én vakt per type.")
     nye_kat = sokmod.bygg_kategorier(kat_nokkel, kat_navn) if (kat_navn or kat_nokkel) else parse_kategorier(kategorier)
     eksisterende = db.vakt(con, ren)
     if eksisterende:
@@ -532,11 +576,11 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
         egen_bil = kj["beskrivelse"]
     tall = lambda x: int(x.strip().replace(" ", "")) if x.strip().replace(" ", "").isdigit() else None  # noqa: E731
     kriterier = {k: v for k, v in {
-        "maks_pris": tall(krit_maks_pris), "maks_km": tall(krit_maks_km),
+        "maks_pris": tall(krit_maks_pris), "maks_km": tall(krit_maks_km), "maks_timer": tall(krit_maks_timer),
         "aar_fra": tall(krit_aar_fra), "aar_til": tall(krit_aar_til),
         "kategorier": [x for x in krit_kat if x.strip()] or None}.items() if v}
     if formaal not in ("eier", "kjoper"):
-        formaal = "eier" if (regnr or egen_km.strip()) else "kjoper"
+        formaal = "eier" if (regnr or egen_km.strip() or egen_timer.strip()) else "kjoper"
     db.lagre_vakt(con, {
         "slug": ren, "navn": navn.strip() or ren, "sok": nye_sok, "kategorier": nye_kat,
         "regnr": regnr or None, "kjoretoy": kj, "formaal": formaal, "kriterier": kriterier,
@@ -544,7 +588,7 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
                      # Kanal-boksene sendes bare når skjemaet har dem; uten dem beholdes «alle på».
                      "kanaler": ({c: (c in varsel_kanaler) for c in varsling.KANALER} if varsel_kanaler is not None
                                  else {c: True for c in varsling.KANALER})},
-        "egen_bil": egen_bil or None, "egen_km": int(egen_km) if egen_km.strip().isdigit() else None,
+        "egen_bil": egen_bil or None, "egen_km": tall(egen_km), "egen_timer": tall(egen_timer),
         "hentetime": hentetime, "aktiv": 1 if aktiv else 0,
         "opprettet": eksisterende.get("opprettet") if eksisterende else None,
         "sist_hentet": eksisterende.get("sist_hentet") if eksisterende else None,
@@ -589,9 +633,10 @@ def api_vakt(slug: str, con: sqlite3.Connection = Depends(kon), b: dict = Depend
     k = _vakt_kontekst(con, slug, b)
     return JSONResponse({
         "vakt": k["v"], "oppsummering": k["oppsummering"],
-        "verdikurve": {x: k["kurve"][x] for x in ("n", "a", "b", "r2", "sd", "estimat", "egen_km")}
+        "akse": k["akse"]["felt"],
+        "verdikurve": {x: k["kurve"][x] for x in ("n", "a", "b", "r2", "sd", "estimat", "egen_km", "egen", "per_enhet")}
         if k["kurve"] else None,
-        "km_botter": k["botter"], "nabolag": k["nabolag"],
+        "km_botter": k["botter"], "botter": k["botter"], "nabolag": k["nabolag"],
         "annonser": k["annonser"], "solgte": k["solgte"],
     })
 

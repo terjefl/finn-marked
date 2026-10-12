@@ -1,15 +1,16 @@
 {% extends "base.html" %}
-{% block tittel %}{{ 'Rediger' if v else 'Følg bil' }} — FINN-marked{% endblock %}
+{% set traktor = akse.felt == 'timer' %}
+{% block tittel %}{{ 'Rediger' if v else 'Følg ' ~ ord }} — FINN-marked{% endblock %}
 {% block innhold %}
-<h1>{% if kopi %}Følg samme bil som «{{ kopi.navn }}»{% elif v %}Rediger{% else %}Følg en ny bil{% endif %}</h1>
-{% if kopi %}<p class="dempet">Søk, kategorier og hentetid er kopiert. Fyll inn eierens bil og kilometerstand,
-  så er bilen klar når hen logger inn. Den henter selv, uavhengig av originalen.</p>{% endif %}
+<h1>{% if kopi %}Følg samme {{ ord }} som «{{ kopi.navn }}»{% elif v %}Rediger{% else %}Følg en ny {{ ord }}{% endif %}</h1>
+{% if kopi %}<p class="dempet">Søk, kategorier og hentetid er kopiert. Fyll inn eierens {{ ord }} og {{ 'timetall' if traktor else 'kilometerstand' }},
+  så er {{ ord }}en klar når hen logger inn. Den henter selv, uavhengig av originalen.</p>{% endif %}
 
 <form method="post" action="/vakt/lagre" id="skjema">
   <div class="kort">
     <div class="rutenett skjema">
       <div><label for="navn" style="margin-top:0">Navn</label>
-        <input type="text" id="navn" name="navn" required value="{{ skjema.navn }}" placeholder="BMW i4 2022"></div>
+        <input type="text" id="navn" name="navn" required value="{{ skjema.navn }}" placeholder="{{ 'John Deere 6130R' if traktor else 'BMW i4 2022' }}"></div>
       <div><label for="slug" style="margin-top:0">Kortnavn (i adressen — bokstaver, tall, bindestrek)</label>
         <input type="text" id="slug" name="slug" required value="{{ skjema.slug }}" placeholder="bmw-i4-2022"
                {% if v %}readonly{% endif %}></div>
@@ -24,14 +25,14 @@
 
   <div class="kort">
     <h2 style="margin-top:0">Søk</h2>
-    <p class="dempet">En bil du følger kan ha flere søk, også fra flere kilder. Taggen merkes på annonsene søket finner
+    <p class="dempet">En {{ ord }} du følger kan ha flere søk, også fra flere kilder. Taggen merkes på annonsene søket finner
       og brukes til kategorisering — et FINN-søk med <code>q=fully</code> og tag <code>fully</code> gir
       kategorien «Fully Charged» også når ordet bare står i beskrivelsen.</p>
     <div id="sok-rader">
       {% for s in skjema.sok %}
       <div class="rad sok-rad">
         <input type="text" name="sok_tag" value="{{ s.tag }}" placeholder="alle" class="tag" title="tag">
-        <input type="url" name="sok_url" value="{{ s.url }}" placeholder="https://www.finn.no/mobility/search/car?…" class="url" required>
+        <input type="url" name="sok_url" value="{{ s.url }}" placeholder="https://www.finn.no/mobility/search/{{ 'b2b/agriculturetractor' if traktor else 'car' }}?…" class="url" required>
         <select name="sok_kilde" class="kilde" title="kilde">
           <option value="auto" {% if s.auto %}selected{% endif %}>auto</option>
           <option value="finn" {% if not s.auto and s.kilde == 'finn' %}selected{% endif %}>finn</option>
@@ -45,7 +46,7 @@
     <template id="sok-mal">
       <div class="rad sok-rad">
         <input type="text" name="sok_tag" placeholder="alle" class="tag" title="tag">
-        <input type="url" name="sok_url" placeholder="https://www.finn.no/mobility/search/car?…" class="url" required>
+        <input type="url" name="sok_url" placeholder="https://www.finn.no/mobility/search/{{ 'b2b/agriculturetractor' if traktor else 'car' }}?…" class="url" required>
         <select name="sok_kilde" class="kilde" title="kilde"><option value="auto">auto</option><option value="finn">finn</option><option value="auksjonen">auksjonen</option></select>
         <span class="pill kildevis"></span>
         <button type="button" class="lett liten fjern" title="Fjern søket">✕</button>
@@ -91,17 +92,22 @@
     <h2 style="margin-top:0">Formål</h2>
     <div class="filtre" id="formaal">
       <label class="valg"><input type="radio" name="formaal" value="eier" {{ 'checked' if skjema.formaal == 'eier' }}>
-        <strong>Jeg eier bilen</strong> <span class="dempet">— hva er den verdt, og når bør jeg selge</span></label>
+        <strong>Jeg eier {{ ord }}en</strong> <span class="dempet">— hva er den verdt, og når bør jeg selge</span></label>
       <label class="valg"><input type="radio" name="formaal" value="kjoper" {{ 'checked' if skjema.formaal != 'eier' }}>
-        <strong>Jeg vil kjøpe</strong> <span class="dempet">— finn riktig bil til riktig pris</span></label>
+        <strong>Jeg vil kjøpe</strong> <span class="dempet">— finn riktig {{ ord }} til riktig pris</span></label>
     </div>
     <div id="kriterier" {% if skjema.formaal == 'eier' %}hidden{% endif %}>
       <h3>Kjøpskriterier</h3>
-      <p class="dempet">Annonser som oppfyller dette listes på bil-siden, sortert etter hvor mye de ligger under
-        forventet pris for kilometerstanden. Tomt felt betyr ingen grense.</p>
+      <p class="dempet">Annonser som oppfyller dette listes på {{ ord }}-siden, sortert etter hvor mye de ligger under
+        forventet pris for {{ 'timetallet' if traktor else 'kilometerstanden' }}. Tomt felt betyr ingen grense.{% if traktor %}
+        FINN har ikke noe timer-filter i søket, så grensen brukes her i appen.{% endif %}</p>
       <div class="rutenett skjema">
-        <div><label style="margin-top:0">Maks pris (kr)</label><input type="number" name="krit_maks_pris" value="{{ skjema.kriterier.maks_pris or '' }}" placeholder="450000"></div>
+        <div><label style="margin-top:0">Maks pris (kr)</label><input type="number" name="krit_maks_pris" value="{{ skjema.kriterier.maks_pris or '' }}" placeholder="{{ '600000' if traktor else '450000' }}"></div>
+        {% if traktor %}
+        <div><label style="margin-top:0">Maks arbeidstimer</label><input type="number" name="krit_maks_timer" value="{{ skjema.kriterier.maks_timer or '' }}" placeholder="4000"></div>
+        {% else %}
         <div><label style="margin-top:0">Maks kilometerstand</label><input type="number" name="krit_maks_km" value="{{ skjema.kriterier.maks_km or '' }}" placeholder="60000"></div>
+        {% endif %}
         <div><label style="margin-top:0">Årsmodell fra</label><input type="number" name="krit_aar_fra" value="{{ skjema.kriterier.aar_fra or '' }}" placeholder="2021"></div>
         <div><label style="margin-top:0">Årsmodell til</label><input type="number" name="krit_aar_til" value="{{ skjema.kriterier.aar_til or '' }}" placeholder="2024"></div>
       </div>
@@ -129,7 +135,7 @@
         <span><strong>{{ navn }}</strong><br><span class="dempet">{{ varsel_forklaring[t] }}</span></span></label>
       {% endfor %}
     </div>
-    <p style="margin:12px 0 4px">Send varslene for denne bilen til:</p>
+    <p style="margin:12px 0 4px">Send varslene for denne {{ ord }}en til:</p>
     <div class="filtre">
       <label class="valg" {% if not kanaler.epost.klar %}style="opacity:.6"{% endif %}>
         <input type="checkbox" name="varsel_kanaler" value="epost" {{ 'checked' if skjema.varsling.kanaler.epost }}>
@@ -139,22 +145,27 @@
         Pushover <span class="dempet">({{ kanaler.pushover.tekst }})</span></label>
     </div>
     {% if not kanaler.epost.klar and not kanaler.pushover.klar %}<p style="color:var(--negativ); margin:6px 0 0">Ingen kanal er klar — legg inn e-post eller Pushover under «Konto».</p>{% endif %}
-    <p class="dempet" style="margin-top:8px">Ingen avkryssing = ingen varsler. Skjer det ingenting, sendes ingenting. Bryterne på «Konto» overstyrer alle bilene.</p>
+    <p class="dempet" style="margin-top:8px">Ingen avkryssing = ingen varsler. Skjer det ingenting, sendes ingenting. Bryterne på «Konto» overstyrer alt du følger.</p>
   </div>
 
-  <div class="kort" id="egen-bil-kort">
-    <h2 style="margin-top:0"><span id="egen-tittel">{{ 'Egen bil og henting' if skjema.formaal == 'eier' else 'Henting' }}</span></h2>
+  <div class="kort" id="egen-bil-kort" data-ord="{{ ord }}">
+    <h2 style="margin-top:0"><span id="egen-tittel">{{ ('Egen ' ~ ord ~ ' og henting') if skjema.formaal == 'eier' else 'Henting' }}</span></h2>
     <div class="rutenett skjema">
       <div><label for="regnr" style="margin-top:0">Registreringsnummer (valgfritt)</label>
         <div style="display:flex; gap:6px">
           <input type="text" id="regnr" name="regnr" value="{{ skjema.regnr }}" placeholder="EB12345" autocapitalize="characters" style="max-width:160px">
           <button type="button" class="lett" id="slaa-opp">Slå opp</button>
         </div>
-        <div class="dempet" id="kjoretoy-info" style="margin-top:6px">{% if skjema.kjoretoy %}{{ skjema.kjoretoy.beskrivelse }}{% if skjema.kjoretoy.forste_registrert %} · reg. {{ skjema.kjoretoy.forste_registrert }}{% endif %}{% if skjema.kjoretoy.eu_frist %} · EU-kontroll innen {{ skjema.kjoretoy.eu_frist }}{% endif %}{% else %}Slås opp hos Statens vegvesen og fyller inn «Egen bil».{% endif %}</div></div>
-      <div><label for="egen_bil" style="margin-top:0">Egen bil (vises i verdiestimatet)</label>
-        <input type="text" id="egen_bil" name="egen_bil" value="{{ skjema.egen_bil }}" placeholder="BMW i4 M50 xDrive 2022"></div>
+        <div class="dempet" id="kjoretoy-info" style="margin-top:6px">{% if skjema.kjoretoy %}{{ skjema.kjoretoy.beskrivelse }}{% if skjema.kjoretoy.forste_registrert %} · reg. {{ skjema.kjoretoy.forste_registrert }}{% endif %}{% if skjema.kjoretoy.eu_frist %} · EU-kontroll innen {{ skjema.kjoretoy.eu_frist }}{% endif %}{% else %}Slås opp hos Statens vegvesen og fyller inn «Egen {{ ord }}».{% endif %}</div></div>
+      <div><label for="egen_bil" style="margin-top:0">Egen {{ ord }} (vises i verdiestimatet)</label>
+        <input type="text" id="egen_bil" name="egen_bil" value="{{ skjema.egen_bil }}" placeholder="{{ 'John Deere 6130R 2018' if traktor else 'BMW i4 M50 xDrive 2022' }}"></div>
+      {% if traktor %}
+      <div><label for="egen_timer" style="margin-top:0">Egne arbeidstimer</label>
+        <input type="number" id="egen_timer" name="egen_timer" value="{{ skjema.egen_timer }}" placeholder="2758"></div>
+      {% else %}
       <div><label for="egen_km" style="margin-top:0">Egen kilometerstand</label>
         <input type="number" id="egen_km" name="egen_km" value="{{ skjema.egen_km }}" placeholder="56028"></div>
+      {% endif %}
       <div><label for="hentetime" style="margin-top:0">Hent automatisk klokka (én gang i døgnet)</label>
         <input type="number" id="hentetime" name="hentetime" min="0" max="23" value="{{ skjema.hentetime }}"></div>
     </div>
@@ -169,12 +180,12 @@
 
 {% if v and not kopi %}
 <form method="post" action="/vakt/{{ v.slug }}/slett" style="margin-top:26px"
-      onsubmit="return confirm('Slutte å følge denne bilen? Kryss av under for å slette historikken også.')">
+      onsubmit="return confirm('Slutte å følge denne {{ ord }}en? Kryss av under for å slette historikken også.')">
   <div class="kort">
     <h3 style="margin-top:0">Slutt å følge</h3>
     <label><input type="checkbox" name="data" value="1" style="width:auto">
-      Slett også alle annonser, prisendringer og historikk for denne bilen</label>
-    <p class="dempet">Uten kryss beholdes historikken i basen, men bilen fjernes fra oversikten.</p>
+      Slett også alle annonser, prisendringer og historikk for denne {{ ord }}en</label>
+    <p class="dempet">Uten kryss beholdes historikken i basen, men {{ ord }}en fjernes fra oversikten.</p>
   </div>
   <button class="fare" type="submit">Slutt å følge</button>
 </form>
@@ -214,12 +225,13 @@
   document.getElementById('ny-kat').addEventListener('click', () => nyRad('kat-mal', 'kat-rader').querySelector('.navn').focus());
   if (!document.querySelector('.sok-rad')) nyRad('sok-mal', 'sok-rader');
   // Formål styrer hvilke felt som vises
-  const krit = document.getElementById('kriterier'), egenFelt = ['regnr', 'egen_bil', 'egen_km'];
+  const krit = document.getElementById('kriterier'), egenFelt = ['regnr', 'egen_bil', 'egen_km', 'egen_timer'];
+  const ord = document.getElementById('egen-bil-kort').dataset.ord || 'bil';
   function visFormaal() {
     const kj = document.querySelector('input[name=formaal]:checked').value === 'kjoper';
     krit.hidden = !kj;
     egenFelt.forEach(id => { const el = document.getElementById(id); if (el) el.closest('.rutenett > div').hidden = kj; });
-    document.getElementById('egen-tittel').textContent = kj ? 'Henting' : 'Egen bil og henting';
+    document.getElementById('egen-tittel').textContent = kj ? 'Henting' : 'Egen ' + ord + ' og henting';
   }
   document.querySelectorAll('input[name=formaal]').forEach(r => r.addEventListener('change', visFormaal));
   visFormaal();

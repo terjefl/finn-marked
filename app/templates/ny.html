@@ -1,12 +1,25 @@
 {% extends "base.html" %}
-{% block tittel %}Følg bil — FINN-marked{% endblock %}
+{% set traktor = akse.felt == 'timer' %}
+{% block tittel %}Følg {{ akse.ord }} — FINN-marked{% endblock %}
 {% block innhold %}
-<h1>Følg en ny bil</h1>
+<div style="display:flex; justify-content:space-between; align-items:baseline; gap:14px; flex-wrap:wrap">
+  <h1>Følg en ny {{ akse.ord }}</h1>
+  <div class="filtre" style="margin:0">
+    <a href="/vakt/ny{{ '?regnr=' ~ (regnr | urlencode) if regnr }}" class="{{ 'aktiv' if not traktor }}">bil</a>
+    <a href="/vakt/ny?type=traktor{{ '&regnr=' ~ (regnr | urlencode) if regnr }}" class="{{ 'aktiv' if traktor }}">traktor</a>
+  </div>
+</div>
+{% if traktor %}
+<p class="dempet">Gjør søket på finn.no under <em>Nyttekjøretøy og maskiner → Traktorer</em> (merke, årsmodell, hestekrefter,
+  det du vil følge), kopier adressen fra adressefeltet og lim den inn her. Appen sjekker søket med en gang og foreslår navn.
+  Traktorer oppgir arbeidstimer i stedet for kilometer, så verdikurven regnes mot timer.</p>
+{% else %}
 <p class="dempet">Gjør søket på finn.no (merke, modell, årsmodell, det du vil følge), kopier adressen fra
   adressefeltet og lim den inn her. Appen sjekker søket med en gang og foreslår navn.</p>
+{% endif %}
 
 <form method="get" action="/vakt/ny" class="kort" id="skjema">
-  <label for="regnr" style="margin-top:0">Raskest: registreringsnummeret på bilen du vil følge</label>
+  <label for="regnr" style="margin-top:0">Raskest: registreringsnummeret på {{ 'traktoren' if traktor else 'bilen' }} du vil følge</label>
   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
     <input type="text" id="regnr" name="regnr" value="{{ regnr or '' }}" placeholder="EB12345" autocapitalize="characters" style="max-width:160px">
     <button type="button" class="lett" id="fra-regnr">Finn søket</button>
@@ -27,7 +40,7 @@
     Eller lim inn et søk du har laget selv:</p>
   <label for="url">Søke-URL fra finn.no eller auksjonen.no</label>
   <div style="display:flex; gap:8px; flex-wrap:wrap">
-    <input type="url" id="url" name="url" required placeholder="https://www.finn.no/mobility/search/car?…" style="flex:1; min-width:260px">
+    <input type="url" id="url" name="url" required placeholder="https://www.finn.no{{ vertikal.sti }}?…" style="flex:1; min-width:260px">
     <button type="button" class="lett" id="sjekk">Sjekk søket</button>
   </div>
   {% if brukere %}
@@ -43,7 +56,7 @@
       <div><div class="dempet">Treff</div><div class="nokkel" id="treff">–</div><div class="dempet" id="sider"></div></div>
       <div><div class="dempet">Foreslått navn</div><div class="nokkel" id="navnvis" style="font-size:18px">–</div><div class="dempet" id="slugvis"></div></div>
     </div>
-    <table style="margin-top:10px"><thead><tr><th>Eksempel</th><th>Pris</th><th>Km</th><th>År</th></tr></thead><tbody id="eks"></tbody></table>
+    <table style="margin-top:10px"><thead><tr><th>Eksempel</th><th>Pris</th><th id="kol-slitasje">{{ akse.kort }}</th><th>År</th></tr></thead><tbody id="eks"></tbody></table>
   </div>
   <div style="margin-top:14px; display:flex; gap:8px">
     <button type="submit" id="videre" disabled>Fortsett til oppsettet</button>
@@ -76,8 +89,11 @@
       document.getElementById('navnvis').textContent = navnFelt.value || '(fyll inn selv)';
       document.getElementById('slug').value = slugify(navnFelt.value);
       document.getElementById('slugvis').textContent = navnFelt.value ? '/vakt/' + slugify(navnFelt.value) : '';
+      // Aksen følger URL-en: en traktor-URL limt inn under «Følg bil» viser likevel timer.
+      const felt = (d.akse && d.akse.felt) || 'km';
+      document.getElementById('kol-slitasje').textContent = (d.akse && d.akse.kort) || 'Km';
       document.getElementById('eks').innerHTML = d.eksempler.map(a =>
-        `<tr><td><a href="${a.url}" target="_blank">${a.tittel || ''} ${a.undertittel || ''}</a></td><td>${kr(a.pris)}</td><td>${kr(a.km)}</td><td>${a.aar || '–'}</td></tr>`).join('')
+        `<tr><td><a href="${a.url}" target="_blank">${a.tittel || ''} ${a.undertittel || ''}</a></td><td>${kr(a.pris)}</td><td>${kr(a[felt])}</td><td>${a.aar || '–'}</td></tr>`).join('')
         || '<tr><td colspan="4" class="dempet">Ingen annonser på første side.</td></tr>';
       res.hidden = false; videre.disabled = false; sjekket = u;
     } catch (e) { feil.textContent = 'Kunne ikke sjekke søket: ' + e.message; }
@@ -126,7 +142,7 @@
   modell.addEventListener('change', byggUrl);
   if (regnr.value.trim()) fraRegnr();   // kom fra «Oppslag» med nummeret ferdig utfylt
   url.addEventListener('input', () => {
-    if (forslag && !url.value.includes('variant=')) { forslag = null; modellvalg.hidden = true; }
+    if (forslag && !/[?&](variant|make)=/.test(url.value)) { forslag = null; modellvalg.hidden = true; }
     if (!forslag) document.getElementById('navn').value = '';   // navnet skal komme fra det nye søket
   });
 

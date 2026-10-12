@@ -9,6 +9,7 @@ UI-et er helt uavhengige av hvor annonsen kommer fra:
       "url": "https://…",
       "tittel": "BMW i4", "undertittel": "Fully Charged",
       "aar": 2022, "km": 47926, "drivstoff": "El", "rekkevidde": 540,
+      "timer": None,                # arbeidstimer (traktor) — der er km None
       "pris": 434532,
       "pris_type": "utropspris",    # utropspris | fastpris | bud | solgt | ukjent
       "sted": "Moss", "selger": "…", "selger_type": "Forhandler",

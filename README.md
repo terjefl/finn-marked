@@ -1,11 +1,11 @@
 # finn-marked
 
-Web-tjeneste som følger med på bruktbilmarkedet over tid: henter *hele*
+Web-tjeneste som følger med på bruktbil- og traktormarkedet over tid: henter *hele*
 søkeresultatet fra kildene, lagrer hver annonse med pris-historikk, og viser
 endringer, salgstakt og verdikurve i et webgrensesnitt.
 
-Bygget for å kunne følge flere markeder samtidig (flere biler, ulike modeller) —
-hver **vakt** (i UI-et: en bil du følger) er ett marked med ett eller flere søk,
+Bygget for å kunne følge flere markeder samtidig (flere biler, ulike modeller, traktorer) —
+hver **vakt** (i UI-et: en bil eller traktor du følger) er ett marked med ett eller flere søk,
 og hvert søk navngir sin **kilde**. Nye plattformer legges til som en adapter i `app/kilder/`.
 
 ## Hva den gjør
@@ -21,8 +21,8 @@ og hvert søk navngir sin **kilde**. Nye plattformer legges til som en adapter i
 * **Kjenner igjen samme bil** på understellsnummer/reg.nr: legges en bil ut på nytt
   med ny annonse, logges det som «lagt ut på nytt» med forrige pris, ikke som ny.
   Har markedet ditt reg.nr, varsles «Din bil ligger ute» når den dukker opp.
-* **Prisindeks over tid**: per henting lagres regresjonens pris ved 60 000 km, så
-  utviklingen ikke farges av at bilene i markedet eldes. Grafen viser hele historikken
+* **Prisindeks over tid**: per henting lagres regresjonens pris ved 60 000 km (traktor:
+  3 000 arbeidstimer), så utviklingen ikke farges av at bilene i markedet eldes. Grafen viser hele historikken
   med indeks, median, kvartilbånd og antall til salgs; en månedstabell viser nye,
   solgte, tilbud og hvor stor andel av tilbudet som ble solgt (salgstakt).
 * **Formål per bil du følger**: *eier* gir verdiestimat, egen bil i markedet og
@@ -32,6 +32,9 @@ og hvert søk navngir sin **kilde**. Nye plattformer legges til som en adapter i
 * **Verdikurve** per marked: regresjon på utropspriser mot kilometerstand, med
   spredning. Sammenlignbare innen ±10 000 km vises ved siden av, fordi det tallet
   er lettere å forholde seg til enn en linje.
+* **Traktor** som egen del: FINN oppgir arbeidstimer i stedet for kilometer, så
+  traktor-vakter regner verdikurve, bøtter (500 t), sammenlignbare (±500 t) og indeks
+  mot timer, har egen vakt-side og egen inngang «Følg traktor». Se «Bil og traktor».
 * **Flere brukere** med passkeys: hver bruker har sine egne vakter, admin ser alle
   og kan sette opp en vakt for en bruker før hen logger inn første gang.
 
@@ -43,11 +46,31 @@ auksjoner holdes utenfor median, kurve og km-bøtter, og vises bare i annonselis
 
 | Kilde | Status | Merknad |
 |---|---|---|
-| `finn` | i bruk | FINN mobilitet (bil, bobil, campingvogn og MC: vertikalen følger søke-URL-en) via JSON-API-et bak søkesiden (strukturerte felt, reg.nr, understellsnummer, utlagt-dato, pris også på solgte). HTML-henteren ligger som reserve: `FINN_KILDE=html` |
+| `finn` | i bruk | FINN mobilitet (bil, bobil, campingvogn, MC og traktor: vertikalen følger søke-URL-en) via JSON-API-et bak søkesiden (strukturerte felt, reg.nr, understellsnummer, utlagt-dato, pris også på solgte). HTML-henteren ligger som reserve for bil: `FINN_KILDE=html` |
 | `auksjonen` | i bruk | Auksjonen.no (JSON-API). Objektene ligger også på FINN, men bud/minstepris hentes her |
 
 Kategorier er ikke hardkodet per merke: mønstrene utledes av vaktens egne
 `kategorier`-nøkler (se «Nye vakter»).
+
+## Bil og traktor
+
+Alt annonsene måler slitasje i kalles en **akse** (`analyse.AKSER`): `km` for bil,
+bobil, campingvogn og MC, `timer` for traktor. Aksen utledes av vaktens FINN-søk
+(`/mobility/search/b2b/agriculturetractor` → traktor) og lagres ikke. Den styrer
+kolonne (`annonser.km` / `annonser.timer`), eierens eget tall (`egen_km` / `egen_timer`),
+indeksens referanse (`kjøringer.ref_km` / `ref_timer`), kjøpskriteriet (`maks_km` /
+`maks_timer`), bøttestørrelse, nabolag og alle tekster. Analysefunksjonene tar aksen som
+valgfri siste parameter med km som standard, så bil-kallene er uendret.
+
+Traktor-vakter bruker `vakt_traktor.html`, som arver bil-siden og bare bytter ut
+seksjonene som snakker om kilometer. Bil- og traktor-søk kan ikke blandes i én vakt.
+FINN har ikke noe timer-filter i søket, så «maks arbeidstimer» filtreres i appen.
+Traktor-annonser uten oppgitt timetall (rundt én av fem) telles i median pris, men
+holdes utenfor kurve og bøtter. Forhandlere legger også hjulsett og annet utstyr i
+traktor-vertikalen med traktormerket som merke; de har ingen timer og koster 25–50 000 kr,
+så terskelen for «urimelig lav pris» (10 % av medianen, som for bil) holder dem utenfor
+median og kurve når søket er låst til merke og årsmodell. De vises i annonselisten med
+merket «pris?».
 
 ## Brukere og innlogging
 
@@ -92,7 +115,8 @@ testknapper for begge kanalene. Uten oppsett virker alt annet som før.
 
 «Oppslag» i menyen slår opp et registreringsnummer uten å lage noe: merke/modell,
 registrering, EU-kontroll, drivverk, vekter og mål. Knappen «Sett opp markedsvakt»
-tar nummeret med til «Følg bil». Skjemaet har også et felt for registreringsnummer. «Slå opp» henter kjøretøyet fra
+tar nummeret med til «Følg bil» (eller «Følg traktor» når Vegvesenet sier teknisk kode T).
+Skjemaet har også et felt for registreringsnummer. «Slå opp» henter kjøretøyet fra
 Statens vegvesens åpne API (enkeltoppslag) og fyller inn «Egen bil»; vakt-siden
 viser merke/modell, første registrering, drivstoff, effekt, rekkevidde og frist for
 EU-kontroll. Kilometerstand finnes ikke der, den tastes fortsatt inn selv.
@@ -109,9 +133,9 @@ Den tidligere endringsstrømmen for ekstern varsling er fjernet.
 
 ```
 GET /api/vakter                              egne vakter + nøkkeltall (admin: alle)
-GET /api/vakt/<slug>                         full markedsdata for én vakt
+GET /api/vakt/<slug>                         full markedsdata for én vakt (feltet akse: km|timer)
 GET /api/vakt/<slug>/annonser.json           annonser (valgfritt ?kategori=)
-GET /api/forhandsvis?url=…                   første side av et søk (til «Følg bil»)
+GET /api/forhandsvis?url=…                   første side av et søk (til «Følg bil/traktor»), med akse
 GET /api/kjoretoy?regnr=…                    egen bil fra Statens vegvesen
 GET /api/sokforslag?regnr=…                  FINN-søk foreslått fra registreringsnummer
 GET /helse                                   helsesjekk (Docker healthcheck) + scheduler-tilstand, åpen
@@ -206,3 +230,13 @@ Bare annonser og prispunkter for `--slug` importeres.
 4. Legg vertsnavnet inn i `sok.kilde_fra_url` og `sok.sjekk_url`, og gi modulen en
    `forhandsvis(url)` (se `finn.py`) så «Følg bil» kan vise første side. Kilden kan
    også velges eksplisitt per søkerad i skjemaet.
+
+## Legge til en ny FINN-vertikal
+
+1. Ny oppføring i `VERTIKALER` i `app/kilder/finn.py` (søkenøkkel, sti, merketre-parameter,
+   visningsnavn og `akse`), og stien i `vertikal_av_url`.
+2. Stien i `sok.sjekk_url`, og Vegvesenets klassekode i `kjoretoy.finn_vertikal` hvis
+   kjøretøyet har registreringsnummer.
+3. Måler vertikalen slitasje i noe annet enn km eller timer: ny akse i `analyse.AKSER`,
+   nye kolonner i en migrering i `app/db.py`, feltet i `fra_api_doc`, `innsamling.hent_vakt`
+   og en egen vakt-mal som arver `vakt.html` (se `vakt_traktor.html`).

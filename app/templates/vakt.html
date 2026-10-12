@@ -11,8 +11,8 @@
     <a href="/api/vakt/{{ v.slug }}" target="_blank"><button class="lett">JSON</button></a>
     {% if brukervalg %}
     <form class="inline" method="get" action="/vakt/{{ v.slug }}/kopier">
-      <select name="til" onchange="if (this.value) this.form.submit()" title="Lag samme bil for en annen bruker">
-        <option value="" selected>Følg samme bil for …</option>
+      <select name="til" onchange="if (this.value) this.form.submit()" title="Lag samme {{ akse.ord }} for en annen bruker">
+        <option value="" selected>Følg samme {{ akse.ord }} for …</option>
         {% for u in brukervalg %}<option value="{{ u.id }}">{{ u.navn }}</option>{% endfor %}
       </select>
       <noscript><button class="lett">Gå</button></noscript>
@@ -27,6 +27,7 @@
   {% if v.sist_hentet %}<br>Sist hentet {{ v.sist_hentet }}{% if kjorer %}: <em>{{ kjorer }}</em>{% endif %}{% endif %}
 </div>
 
+{% block nokkeltall %}
 <div class="rutenett">
   <div class="kort"><div class="dempet">Til salgs</div><div class="nokkel">{{ filtrert_oppsummering.antall }}</div>
        <div class="dempet">{{ filtrert_oppsummering.antall_pris }} med utropspris{% if filtrert_oppsummering.antall_bud %} · {{ filtrert_oppsummering.antall_bud }} på auksjon (bud){% endif %}{% if filtrert_oppsummering.antall_urimelig %} · {{ filtrert_oppsummering.antall_urimelig }} med urimelig pris holdt utenfor{% endif %}</div></div>
@@ -40,7 +41,9 @@
   <div class="kort"><div class="dempet">Solgt (registrert)</div><div class="nokkel">{{ solgte | length }}</div>
        <div class="dempet">{% if liggetid %}median liggetid {{ liggetid.median | round | int }} dager ({{ liggetid.min }}–{{ liggetid.max }}){% else %}FINN markerer solgte annonser i søket{% endif %}</div></div>
 </div>
+{% endblock %}
 
+{% block kandidater %}
 {% if v.formaal == 'kjoper' %}
 <div class="kort" style="border-left:4px solid var(--positiv)">
   <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:baseline">
@@ -88,15 +91,17 @@
   {% endif %}
 </div>
 {% endif %}
+{% endblock %}
 
 {% if egen_ute %}
 <div class="kort" style="border-color:var(--advarsel)">
-  <strong>Din bil ligger ute på FINN.</strong>
+  <strong>Din {{ akse.ord }} ligger ute på FINN.</strong>
   {% for a in egen_ute %}<a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or '' }}</a>
   – {{ a.pris | kr }} kr{% if a.solgt %}, solgt {{ a.solgt_dato }}{% endif %}{% if not loop.last %} · {% endif %}{% endfor %}
 </div>
 {% endif %}
 
+{% block egen_kjoretoy %}
 {% if v.kjoretoy %}
 <div class="kort bil">
   <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:baseline">
@@ -117,7 +122,9 @@
   </div>
 </div>
 {% endif %}
+{% endblock %}
 
+{% block kurve %}
 {% if kurve %}
 <div class="kort">
   <h2 style="margin-top:0">Pris mot kilometerstand</h2>
@@ -166,7 +173,9 @@
 })();
 </script>
 {% endif %}
+{% endblock %}
 
+{% block botter %}
 <h2>Pris per kilometerintervall</h2>
 <div class="tabell"><table>
   <thead><tr><th>Km</th><th>Antall</th><th>Median utropspris</th></tr></thead>
@@ -177,6 +186,7 @@
   {% endfor %}
   </tbody>
 </table></div>
+{% endblock %}
 
 <h2>Endringer</h2>
 {% if hendelser %}
@@ -211,18 +221,18 @@
 <form method="get" action="/vakt/{{ v.slug }}" style="margin-bottom:12px; display:flex; gap:8px">
   <input type="hidden" name="kategori" value="{{ kategori if kategori != 'alle' }}">
   <input type="hidden" name="aar" value="{{ aar }}">
-  <input type="text" name="q" value="{{ q }}" placeholder="fritekst i tittel (f.eks. hengerfeste, laser, soltak)">
+  <input type="text" name="q" value="{{ q }}" placeholder="{% block sok_plassholder %}fritekst i tittel (f.eks. hengerfeste, laser, soltak){% endblock %}">
   <button class="lett">Filtrer</button>
 </form>
 <div class="tabell"><table>
-  <thead><tr><th>Pris</th><th>Km</th><th class="skjul-m">År</th><th>Annonse</th><th class="skjul-m">Sted</th><th class="skjul-m">Selger</th><th>Kategori</th><th class="skjul-m">Kilde</th></tr></thead>
+  <thead><tr><th>Pris</th><th>{% block tilsalgs_kolonne %}Km{% endblock %}</th><th class="skjul-m">År</th><th>Annonse</th><th class="skjul-m">Sted</th><th class="skjul-m">Selger</th><th>Kategori</th><th class="skjul-m">Kilde</th></tr></thead>
   <tbody>
   {% for a in annonser %}
     <tr>
       <td class="tall">{{ a.pris | kr }}{% if a.pris_type == 'bud' %} <span class="dempet">bud</span>{% endif %}{% if a.kilde_id in urimelige %} <span class="pill solgt" title="Urimelig lav — holdt utenfor statistikken">pris?</span>{% endif %}</td>
-      <td class="tall">{{ a.km | kr }}</td>
+      <td class="tall">{% block tilsalgs_verdi scoped %}{{ a.km | kr }}{% endblock %}</td>
       <td class="skjul-m">{{ a.aar or "–" }}</td>
-      <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or "" }}</a>{% if a.kilde_id in igjen %} <span class="pill v2" title="Samme bil har vært ute før">igjen</span>{% endif %}
+      <td><a href="{{ a.url }}" target="_blank">{{ a.tittel }} {{ a.undertittel or "" }}</a>{% if a.kilde_id in igjen %} <span class="pill v2" title="Samme {{ akse.ord }} har vært ute før">igjen</span>{% endif %}
           <span class="bare-m dempet"><br>{{ a.aar or "" }}{% if a.sted %} · {{ a.sted }}{% endif %}{% if a.selger_type %} · {{ a.selger_type }}{% endif %}</span></td>
       <td class="skjul-m">{{ a.sted or "–" }}</td>
       <td class="skjul-m">{{ a.selger_type or "–" }}{% if a.selger %} <span class="dempet">{{ a.selger }}</span>{% endif %}</td>
@@ -236,10 +246,10 @@
 {% if solgte %}
 <h2>Solgt siden overvåkingen startet ({{ solgte | length }})</h2>
 <div class="tabell"><table>
-  <thead><tr><th>Km</th><th>Annonse</th><th>Sist utropspris</th><th>Solgt</th><th>Lå ute</th></tr></thead>
+  <thead><tr><th>{{ self.tilsalgs_kolonne() }}</th><th>Annonse</th><th>Sist utropspris</th><th>Solgt</th><th>Lå ute</th></tr></thead>
   <tbody>
   {% for a in solgte %}
-    <tr><td>{{ a.km | kr }}</td>
+    <tr><td>{% block solgt_verdi scoped %}{{ a.km | kr }}{% endblock %}</td>
         <td>{{ a.tittel }} {{ a.undertittel or "" }}</td>
         <td>{{ a.pris | kr }}</td>
         <td>{{ a.solgt_dato or "–" }}</td>
@@ -254,8 +264,8 @@
 <h2>Prisutvikling</h2>
 <div class="kort">
   {{ historikk_svg | safe }}
-  <p class="dempet" style="margin:8px 0 0">Indeksen er regresjonens pris ved fast kilometerstand, så den ikke faller bare fordi
-    bilene i markedet blir eldre. Medianen er alle til salgs med utropspris. Flaten nederst er antall til salgs.
+  <p class="dempet" style="margin:8px 0 0">{% block prisutvikling_tekst %}Indeksen er regresjonens pris ved fast kilometerstand, så den ikke faller bare fordi
+    bilene i markedet blir eldre.{% endblock %} Medianen er alle til salgs med utropspris. Flaten nederst er antall til salgs.
     Grafen dekker hele historikken; filtrene over påvirker den ikke.</p>
 </div>
 

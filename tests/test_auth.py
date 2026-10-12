@@ -194,6 +194,61 @@ def hoved() -> int:
             sjekk("knappen teller andres", "Vis også andres (1)" in c.get("/").text, True)
             sjekk("forsiden: formålsfilter", ("bmw-i4-2022" in c.get("/?formaal=kjoper").text,
                                              "bmw-i4-2022" in c.get("/?formaal=eier").text), (True, False))
+            # Traktor: egen inngang, timer i stedet for km, egen vakt-mal
+            traktor_url = "https://www.finn.no/mobility/search/b2b/agriculturetractor?make=0.3154&year_from=2015"
+            r = c.get("/vakt/ny", params={"type": "traktor"})
+            sjekk("ny traktor steg 1", "Følg en ny traktor" in r.text and "b2b/agriculturetractor" in r.text, True)
+            sjekk("bil-inngangen er uendret", "Følg en ny bil" in c.get("/vakt/ny").text, True)
+            finn_kilde.forhandsvis = lambda url, antall=3: {
+                "treff": 12, "sider": 1, "kort_pa_siden": 12, "titler": ["John Deere 6130R"] * 12,
+                "eksempler": [{"tittel": "John Deere 6130R", "undertittel": None, "pris": 890000, "km": None, "timer": 2758, "aar": 2018, "url": "u"}]}
+            r = c.get("/api/forhandsvis", params={"url": traktor_url}).json()
+            sjekk("forhåndsvis traktor: akse og vertikal", (r["akse"]["felt"], r["akse"]["kort"], r["vertikal"], r["eksempler"][0]["timer"]),
+                  ("timer", "Timer", "tractor", 2758))
+            r = c.get("/vakt/ny", params={"url": traktor_url, "navn": "John Deere 6130R", "slug": "jd"})
+            sjekk("traktor steg 2: timer-felt, ikke km", ("Egne arbeidstimer" in r.text, 'name="egen_km"' in r.text, "Jeg eier traktoren" in r.text),
+                  (True, False, True))
+            r = c.post("/vakt/lagre", data={"slug": "jd", "navn": "John Deere 6130R", "hentetime": "7", "aktiv": "1",
+                                            "sok_tag": "alle", "sok_url": traktor_url, "sok_kilde": "auto",
+                                            "egen_bil": "John Deere 6130R 2018", "egen_timer": "2 500", "krit_maks_timer": "4000"})
+            sjekk("traktor lagret", (r.status_code, r.headers["location"]), (303, "/vakt/jd"))
+            with db.aapen() as con:
+                vt = db.vakt(con, "jd")
+                sjekk("traktor: egen_timer og formål", (vt["egen_timer"], vt["egen_km"], vt["formaal"]), (2500, None, "eier"))
+                for i in range(6):
+                    con.execute("INSERT INTO annonser (slug, kilde, kilde_id, tittel, aar, timer, pris, pris_type, url, aktiv, solgt) "
+                                "VALUES ('jd','finn',?,?,2018,?,?,'utropspris','u',1,0)",
+                                (f"t{i}", f"Traktor {i}", 1000 + i * 500, 900000 - i * 50000))
+                con.commit()
+            r = c.get("/vakt/jd")
+            sjekk("traktor-siden: timer-språk", ("Arbeidstimer" in r.text, "Pris mot arbeidstimer" in r.text, "Egen traktor" in r.text,
+                                                 "Pris per timeintervall" in r.text, "Kilometerstand" in r.text, "2 500 t på telleren" in r.text),
+                  (True, True, True, True, False, True))
+            sjekk("traktor-siden: rediger-lenke og kopi-nedtrekk", "Følg samme traktor for" in r.text, True)
+            r = c.get("/api/vakt/jd").json()
+            sjekk("api traktor: akse og estimat", (r["akse"], round(r["verdikurve"]["estimat"]), r["botter"][0]["til"]), ("timer", 750000, 1500))
+            sjekk("rediger traktor", ("Maks arbeidstimer" in c.get("/vakt/jd/rediger").text, "Min egen traktor legges ut" in c.get("/vakt/jd/rediger").text), (True, True))
+            sjekk("bil-siden fortsatt km", ("Kilometerstand" in c.get("/vakt/gammel").text or "kilometerstand" in c.get("/vakt/gammel").text,
+                                           "Arbeidstimer" in c.get("/vakt/gammel").text), (True, False))
+            sjekk("forsiden grupperer bil og traktor", ("Traktorer</h2>" in c.get("/").text, "Biler og traktorer du følger" in c.get("/").text), (True, True))
+            r = c.post("/vakt/lagre", data={"slug": "blanding", "navn": "Blanding", "hentetime": "7",
+                                            "sok_tag": ["a", "b"], "sok_url": ["https://www.finn.no/mobility/search/car?a=1", traktor_url],
+                                            "sok_kilde": ["auto", "auto"]})
+            sjekk("bil og traktor kan ikke blandes", r.status_code, 400)
+            kjmod.slaa_opp = lambda regnr: {"regnr": "AB1234", "merke": "John Deere", "modell": "6130R", "aar": 2018, "modellaar": None,
+                                            "elektrisk": False, "klasse": "Traktor", "klassekode": "T1", "beskrivelse": "John Deere 6130R 2018"}
+            finn_kilde.hent_merketre = lambda tving=False, vertikal="car": [
+                {"navn": "John Deere", "kode": "0.3154", "param": "make", "modeller": []}] if vertikal == "tractor" else []
+            r = c.get("/oppslag", params={"regnr": "AB1234"})
+            sjekk("oppslag traktor → traktor-inngangen", 'href="/vakt/ny?type=traktor&amp;regnr=AB1234"' in r.text and "Følg denne traktoren" in r.text, True)
+            r = c.get("/api/sokforslag", params={"regnr": "AB1234"}).json()
+            sjekk("sokforslag traktor", (r["vertikal"], r["url"], r["navn"]),
+                  ("tractor", "https://www.finn.no/mobility/search/b2b/agriculturetractor?make=0.3154&year_from=2018&year_to=2018", "John Deere 2018"))
+            kjmod.slaa_opp = lambda regnr: {"regnr": "EB12345", "merke": "BMW", "modell": "I4", "aar": 2022,
+                                            "modellaar": 2022, "elektrisk": True, "beskrivelse": "BMW I4 M50 xDrive 2022"}
+            finn_kilde.hent_merketre = lambda tving=False, vertikal="car": [
+                {"navn": "BMW", "kode": "0.749", "param": "variant", "modeller": [{"navn": "i4", "kode": "1.749.8308", "param": "variant"}]}]
+
             r = c.get("/vakt/bmw-i4-2022/kopier", params={"til": kari["id"]})
             sjekk("kopi til Kari forhåndsutfylt",
                   'value="BMW i4 2022 (endret) (Kari)"' in r.text and 'value="bmw-i4-2022-kari"' in r.text
