@@ -542,7 +542,8 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
           kat_navn: list[str] = Form([]), kat_nokkel: list[str] = Form([]), regnr: str = Form(""),
           formaal: str = Form(""), krit_maks_pris: str = Form(""), krit_maks_km: str = Form(""),
           krit_maks_timer: str = Form(""), krit_aar_fra: str = Form(""), krit_aar_til: str = Form(""), krit_kat: list[str] = Form([]),
-          varsle: str | None = Form(None), varsel_typer: list[str] = Form([]), varsel_kanaler: list[str] = Form(None),
+          varsle: str | None = Form(None), varsel_typer: list[str] = Form([]), varsel_kanaler: list[str] = Form([]),
+          varsel_kanaler_sendt: str = Form(""),
           con: sqlite3.Connection = Depends(kon), b: dict = Depends(bruker)):
     """Skjemaet sender søk og kategorier som rader (sok_*/kat_*). De gamle tekstfeltene
     `sok`/`kategorier` godtas fortsatt, så eldre klienter og tester virker."""
@@ -586,8 +587,10 @@ def lagre(slug: str = Form(...), navn: str = Form(...), sok: str = Form(""),
         "slug": ren, "navn": navn.strip() or ren, "sok": nye_sok, "kategorier": nye_kat,
         "regnr": regnr or None, "kjoretoy": kj, "formaal": formaal, "kriterier": kriterier,
         "varsling": {"aktiv": bool(gyldige_typer := [t for t in varsel_typer if t in varsling.TYPER]), "typer": gyldige_typer,
-                     # Kanal-boksene sendes bare når skjemaet har dem; uten dem beholdes «alle på».
-                     "kanaler": ({c: (c in varsel_kanaler) for c in varsling.KANALER} if varsel_kanaler is not None
+                     # Tomme avkryssingsbokser sendes ikke, så skjemaet har et skjult markørfelt.
+                     # Mangler markøren (eldre klienter, tester), beholdes «alle på».
+                     "kanaler": ({c: (c in varsel_kanaler) for c in varsling.KANALER}
+                                 if (varsel_kanaler or varsel_kanaler_sendt)
                                  else {c: True for c in varsling.KANALER})},
         "egen_bil": egen_bil or None, "egen_km": tall(egen_km), "egen_timer": tall(egen_timer),
         "hentetime": hentetime, "aktiv": 1 if aktiv else 0,

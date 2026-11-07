@@ -151,6 +151,21 @@ def hoved() -> int:
                       ("kjoper", {"maks_pris": 450000, "maks_km": 60000, "aar_fra": 2022, "kategorier": ["Fully Charged"]}))
                 sjekk("varsling lagret (ukjent type filtrert, kanaler på)", vk["varsling"],
                       {"aktiv": True, "typer": ["kandidat"], "kanaler": {"epost": True, "pushover": True}})
+            # Begge kanalboksene tomme: nettleseren sender ingen varsel_kanaler, bare markøren.
+            c.post("/vakt/lagre", data={"slug": "bmw-i4-2022", "navn": "BMW i4 2022 (endret)", "hentetime": "8",
+                                        "sok_tag": "alle", "sok_url": "https://www.finn.no/mobility/search/car?a=1",
+                                        "varsel_typer": ["kandidat"], "varsel_kanaler_sendt": "1"})
+            with db.aapen() as con:
+                sjekk("begge kanaler av blir lagret som av", db.vakt(con, "bmw-i4-2022")["varsling"]["kanaler"],
+                      {"epost": False, "pushover": False})
+            c.post("/vakt/lagre", data={"slug": "bmw-i4-2022", "navn": "BMW i4 2022 (endret)", "hentetime": "8",
+                                        "sok_tag": "alle", "sok_url": "https://www.finn.no/mobility/search/car?a=1",
+                                        "varsel_typer": ["kandidat"], "varsel_kanaler_sendt": "1", "varsel_kanaler": ["epost"]})
+            with db.aapen() as con:
+                sjekk("én kanal valgt lagres riktig", db.vakt(con, "bmw-i4-2022")["varsling"]["kanaler"],
+                      {"epost": True, "pushover": False})
+            sjekk("skjemaet har markøren for kanalboksene",
+                  'name="varsel_kanaler_sendt"' in c.get("/vakt/bmw-i4-2022/rediger").text, True)
             c.post("/konto/tema", data={"tema": "moerk"})
             sjekk("tema lagres og settes på html", 'data-tema="moerk"' in c.get("/").text, True)
             c.post("/konto/tema", data={"tema": "tull"})

@@ -137,6 +137,8 @@
     </div>
     <p style="margin:12px 0 4px">Send varslene for denne {{ ord }}en til:</p>
     <div class="filtre">
+      {# Markør: uten den sendes ingenting når begge boksene er tomme, og serveren kan ikke skille «ingen valgt» fra «skjema uten kanalbokser». #}
+      <input type="hidden" name="varsel_kanaler_sendt" value="1">
       <label class="valg" {% if not kanaler.epost.klar %}style="opacity:.6"{% endif %}>
         <input type="checkbox" name="varsel_kanaler" value="epost" {{ 'checked' if skjema.varsling.kanaler.epost }}>
         E-post <span class="dempet">({{ kanaler.epost.tekst }})</span></label>
