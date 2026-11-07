@@ -143,16 +143,11 @@ GET /helse                                   helsesjekk (Docker healthcheck) + s
 
 ## Drift
 
-* **Bygg:** stacken i Portainer (`DOCKERSRV1/finn-marked/compose.yml`) bygger imaget
-  direkte fra dette repoet — `build.context: https://github.com/terjefl/finn-marked.git#main`.
-  Ingen registry-innlogging, ingen lokal arbeidskopi: «Pull and redeploy» i Portainer
-  henter fersk kode og bygger på nytt (~15 s). Det finnes **ingen** deploy-script for
-  dette lenger; tidligere lå tarball-varianten i `scripts/oppdater-vert.sh`.
-* **Hvorfor ikke `image:` fra ghcr:** Portainer kjører `docker compose pull` før hver
-  deploy. ghcr-pakken er privat og svarer 401 anonymt, og da avbrytes hele deployen.
-  Uten `image:`-linje svarer compose «Skipped - No image to be pulled». GitHub Actions
-  bygger og pusher likevel imaget ved push, så det kan tas i bruk ved å bytte til
-  `image: ghcr.io/terjefl/finn-marked:latest` + `pull_policy: missing`.
+* **Bygg og deploy:** GitHub Actions bygger imaget ved hver push til `main` og
+  publiserer det som `ghcr.io/terjefl/finn-marked:latest` (offentlig pakke). Stacken i
+  Portainer (`DOCKERSRV1/finn-marked/compose.yml` i Docker-repoet) bruker det imaget,
+  så en oppdatering er: push til main, vent på workflowen, «Pull and redeploy» i
+  Portainer. Fram til november 2026 bygde stacken selv fra repoet fordi pakken var privat.
 * **CI:** `.github/workflows/bygg.yml` kjører `ruff` og testene før image-bygget.
   Feiler sjekkene, blir det ikke noe image.
 * **Data:** SQLite i `/data` — bind-mount på verten. Ingen database å drifte.
